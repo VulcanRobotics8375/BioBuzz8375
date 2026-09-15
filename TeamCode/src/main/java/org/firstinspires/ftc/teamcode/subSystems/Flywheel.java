@@ -6,8 +6,9 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.PIDFCoefficients;
 
-@TeleOp
-public class Flywheel extends OpMode{
+import robotcore.Subsystem;
+
+public class Flywheel extends Subsystem {
     boolean isOn = false, rightTuning = true;
     public DcMotorEx OuttakeMotor = null;
     public double lowVelocity = 900, highVelocity = 1500, curTargetVelocity = highVelocity;
@@ -15,7 +16,6 @@ public class Flywheel extends OpMode{
     double[] stepSizes = {10.0, 1.0, 0.1, 0.001, 0.0001};
     int stepIndex = 1;
 
-    @Override
     public void init() {
         OuttakeMotor = hardwareMap.get(DcMotorEx.class, "outtake_motor");
         OuttakeMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
@@ -26,8 +26,7 @@ public class Flywheel extends OpMode{
         telemetry.addLine("Init  complete");
     }
 
-    @Override
-    public void loop() {
+    public void runFlywheel() {
         //get all our gamepad commands
         // set target velocity
         // update telemetry
@@ -78,5 +77,10 @@ public class Flywheel extends OpMode{
         telemetry.addData("Tuning PR", "%.4f (D-Pad U/D)", PR);
         telemetry.addData("Tuning FR", "%.4f (D-Pad L/R)", FR);
         telemetry.addData("Step Size", "%.4f (B Button)",stepSizes[stepIndex]);
+    }
+
+    @Override
+    public void init(OpMode opMode) {
+
     }
 }
