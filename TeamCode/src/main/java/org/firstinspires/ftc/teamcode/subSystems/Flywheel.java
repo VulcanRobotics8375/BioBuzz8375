@@ -17,7 +17,7 @@ public class Flywheel extends OpMode{
 
     @Override
     public void init() {
-        OuttakeMotor = hardwareMap.get(DcMotorEx.class, "outtake_motor_right");
+        OuttakeMotor = hardwareMap.get(DcMotorEx.class, "outtake_motor");
         OuttakeMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         OuttakeMotor.setDirection(DcMotor.Direction.REVERSE);
         PIDFCoefficients pidfCoefficientsR = new PIDFCoefficients(PR,0,0,FR);

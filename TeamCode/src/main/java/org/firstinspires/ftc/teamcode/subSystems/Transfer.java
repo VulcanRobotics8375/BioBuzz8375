@@ -18,7 +18,7 @@ public class Transfer extends Subsystem {
 
     public void runTransfer() {
         if (gamepad1.x) {
-            TransferServo.setPosition(0.5);
+            TransferServo.setPosition(0.1);
         } else {
             TransferServo.setPosition(0.0);
         }
