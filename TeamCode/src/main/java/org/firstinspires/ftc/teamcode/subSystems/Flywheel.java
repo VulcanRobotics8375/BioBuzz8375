@@ -16,7 +16,8 @@ public class Flywheel extends Subsystem {
     double[] stepSizes = {10.0, 1.0, 0.1, 0.001, 0.0001};
     int stepIndex = 1;
 
-    public void init() {
+    @Override
+    public void init(OpMode opMode) {
         OuttakeMotor = hardwareMap.get(DcMotorEx.class, "outtake_motor");
         OuttakeMotor.setMode(DcMotor.RunMode.RUN_USING_ENCODER);
         OuttakeMotor.setDirection(DcMotor.Direction.REVERSE);
@@ -77,10 +78,5 @@ public class Flywheel extends Subsystem {
         telemetry.addData("Tuning PR", "%.4f (D-Pad U/D)", PR);
         telemetry.addData("Tuning FR", "%.4f (D-Pad L/R)", FR);
         telemetry.addData("Step Size", "%.4f (B Button)",stepSizes[stepIndex]);
-    }
-
-    @Override
-    public void init(OpMode opMode) {
-
     }
 }

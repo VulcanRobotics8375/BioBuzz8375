@@ -25,7 +25,8 @@ public class fieldCentricMecanum extends Subsystem{
     private boolean isLocking = false;
     public static double kP = 0.9; //tune to adjust correction strength for anti-drifting.Tuned 8/16/26 by Zara
 
-    public void init(HardwareMap hwMap, Telemetry telemetry) {
+    @Override
+    public void init(OpMode opMode) {
         //this.telemetry = telemetry;
         //connect actual motors to programmable objects
         frontLeftDrive = hardwareMap.get(DcMotor.class, "leftFront");
@@ -77,7 +78,7 @@ public class fieldCentricMecanum extends Subsystem{
     }
 
     public void fieldCentric(double axial, double lateral, double yaw) {
-        odo.update(); //update odo positions and sensors
+        odo.update(); //update odo positions and class sensors
         Pose2D pos = odo.getPosition();
 
         double currentHeading = pos.getHeading(AngleUnit.RADIANS);
@@ -115,11 +116,5 @@ public class fieldCentricMecanum extends Subsystem{
         double newStrafe = r * Math.cos(theta);
 
         this.drive(newAxial, newStrafe, yaw);
-    }
-
-
-    @Override
-    public void init(OpMode opMode) {
-
     }
 }
