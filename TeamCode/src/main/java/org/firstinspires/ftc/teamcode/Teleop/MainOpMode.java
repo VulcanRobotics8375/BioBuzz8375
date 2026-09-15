@@ -18,6 +18,8 @@ import org.firstinspires.ftc.teamcode.subSystems.Intake;
 
     public void init(){
         drive.instantiateSubsystem(this);
+        Intake.instantiateSubsystem(this);
+        Flywheel.instantiateSubsystem(this);
         drive.init(this);
         Intake.init(this);
         Flywheel.init(this);
