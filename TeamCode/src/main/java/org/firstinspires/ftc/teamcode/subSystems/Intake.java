@@ -11,7 +11,7 @@ import java.util.Locale;
 import robotcore.Subsystem;
 
 public class Intake extends Subsystem {
-    private boolean pos = true, moving =false; //true = up; false = down
+    private boolean pos = false, moving =false; //true = up; false = down
     private double angle = 0;
     private double i=0;
     private DcMotor intakeMotor = null;
@@ -27,6 +27,9 @@ public class Intake extends Subsystem {
         savox = hardwareMap.get(Servo.class, "savox");
         axon = hardwareMap.get(Servo.class, "axon");
         axon.setDirection(Servo.Direction.REVERSE);
+        axon.setPosition((10 / 255) + (99 / 255));
+        savox.setPosition(0.1 + (1 / 80) + (99 / 160));
+
 
     }
     public void moveIntake() {

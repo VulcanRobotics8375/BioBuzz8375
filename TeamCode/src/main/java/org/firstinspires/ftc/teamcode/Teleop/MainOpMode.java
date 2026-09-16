@@ -4,6 +4,7 @@ import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.teamcode.subSystems.Flywheel;
+import org.firstinspires.ftc.teamcode.subSystems.MotorOuttake;
 import org.firstinspires.ftc.teamcode.subSystems.fieldCentricMecanum;
 import org.firstinspires.ftc.teamcode.subSystems.Intake;
 
@@ -13,16 +14,16 @@ import org.firstinspires.ftc.teamcode.subSystems.Intake;
     private double axial, lateral, yaw;
     fieldCentricMecanum drive = new fieldCentricMecanum();
     Intake Intake = new Intake();
-    Flywheel Flywheel = new Flywheel();
+    MotorOuttake Outtake = new MotorOuttake();
 
 
     public void init(){
         drive.instantiateSubsystem(this);
         Intake.instantiateSubsystem(this);
-        Flywheel.instantiateSubsystem(this);
+        Outtake.instantiateSubsystem(this);
         drive.init(this);
         Intake.init(this);
-        Flywheel.init(this);
+        Outtake.init(this);
     }
 
     @Override
@@ -34,7 +35,7 @@ import org.firstinspires.ftc.teamcode.subSystems.Intake;
         Intake.moveIntake();
         drive.fieldCentric(axial, lateral, yaw);
         Intake.runIntake();
-        Flywheel.runFlywheel();
+        Outtake.runOuttake();
         telemetry.update();
     }
 }
