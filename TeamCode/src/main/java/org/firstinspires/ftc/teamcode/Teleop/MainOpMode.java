@@ -31,8 +31,10 @@ import org.firstinspires.ftc.teamcode.subSystems.Intake;
         lateral = -gamepad1.left_stick_x;
         yaw = gamepad1.right_stick_x;
 
+        Intake.moveIntake();
         drive.fieldCentric(axial, lateral, yaw);
         Intake.runIntake();
         Flywheel.runFlywheel();
+        telemetry.update();
     }
 }
