@@ -15,8 +15,8 @@ public class MotorOuttake extends Subsystem {
     public DcMotorEx OuttakeMotor;
 
     double lastError = 0, integralSum = 0;
-    public static double kP = 200, kI = 8, kD = 1;
-    public static double rpm = 3000;
+    public static double kP = 1100, kI = 8, kD = 1;
+    public static double rpm = 1000;
     FtcDashboard dashboard;
     ElapsedTime timer = new ElapsedTime();
 
@@ -27,13 +27,12 @@ public class MotorOuttake extends Subsystem {
         OuttakeMotor = hardwareMap.get(DcMotorEx.class, "outtake_motor");
         OuttakeMotor.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         OuttakeMotor.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT);
-
         dashboard = FtcDashboard.getInstance();
     }
 
     public void runOuttake() {
         double targetTicksPerSec = (rpm / 60.0) * 28.0;
-        double actualTicksPerSec = -1*OuttakeMotor.getVelocity();
+        double actualTicksPerSec = OuttakeMotor.getVelocity();
         double actualRPM = (actualTicksPerSec / 28.0) * 60.0;
 
         if(gamepad1.rightBumperWasPressed()){
@@ -82,7 +81,6 @@ public class MotorOuttake extends Subsystem {
         packet.put("actualRPM", actualRPM);
         dashboard.sendTelemetryPacket(packet);
         telemetry.addData("rpm", rpm);
-        telemetry.update();
     }
 
 }
