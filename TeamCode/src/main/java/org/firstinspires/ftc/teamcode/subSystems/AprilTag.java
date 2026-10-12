@@ -25,7 +25,7 @@ public class AprilTag extends Subsystem {
         initAprilTag();
         CRServo turretServo1 = hardwareMap.get(CRServo.class,"Turret_Servo1");
         CRServo turretServo2 = hardwareMap.get(CRServo.class,"Turret_Servo2");
-
+        // add encoder(S)???
     }
     public void initAprilTag() {
         aprilTag = new AprilTagProcessor.Builder()
@@ -36,9 +36,21 @@ public class AprilTag extends Subsystem {
                 .setCamera(hardwareMap.get(WebcamName.class,"Webcam1"))
                 .addProcessor(aprilTag)
                 .build();
-}
+    }
 
     public void turret() {
         List<AprilTagDetection> tagsDetected = aprilTag.getDetections();
+        AprilTagDetection closestTag = null;
+        double minValue = 1000;
+        for (AprilTagDetection detection : tagsDetected) {
+            double distance = detection.ftcPose.range;
+            if (detection.metadata == null) {
+                break;
+            }
+            if (distance < minValue) {
+                minValue = distance;
+                closestTag = detection;
+            }
+        }
     }
 }
