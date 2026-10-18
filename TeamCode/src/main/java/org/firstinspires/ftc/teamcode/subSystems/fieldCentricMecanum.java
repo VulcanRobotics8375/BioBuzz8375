@@ -36,7 +36,7 @@ public class fieldCentricMecanum extends Subsystem{
         odo = hardwareMap.get(GoBildaPinpointDriver.class,"odo");
 
         //odo.setOffsets(-142.93, 30.469, DistanceUnit.MM);
-        odo.setOffsets(-156.626489257812, 42.521887207031, DistanceUnit.MM);
+        odo.setOffsets(2.7107889971395167, 1.3714638056717519, DistanceUnit.INCH);
         odo.setEncoderResolution(74.5027025034, DistanceUnit.MM);
         odo.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.FORWARD, GoBildaPinpointDriver.EncoderDirection.FORWARD);
         odo.resetPosAndIMU();

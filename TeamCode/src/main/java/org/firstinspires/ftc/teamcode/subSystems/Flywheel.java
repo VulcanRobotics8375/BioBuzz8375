@@ -1,10 +1,10 @@
 package org.firstinspires.ftc.teamcode.subSystems;
 
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
-import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.PIDFCoefficients;
+
 
 import robotcore.Subsystem;
 
@@ -35,7 +35,7 @@ public class Flywheel extends Subsystem {
         if (gamepad1.yWasPressed()){
             if (curTargetVelocity == highVelocity) {
                 curTargetVelocity = lowVelocity;
-            }else {curTargetVelocity = highVelocity; }
+            } else {curTargetVelocity = highVelocity; }
         }
 
         if(gamepad1.bWasPressed()){

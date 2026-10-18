@@ -59,8 +59,8 @@ public class Constants {
             .customEncoderResolution(74.5027025034)
             .forwardEncoderDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD)
             .strafeEncoderDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD)
-            .forwardPodY(-156.626489257812) //configurable
-            .strafePodX(42.521887207031); //configurable
+            .forwardPodY(0) //configurable
+            .strafePodX(0); //configurable
     //strafepodx: 1.674090047520913
     //forwardpody: -6.166397214874507
 //            .forwardPodY(95.246069335937)
