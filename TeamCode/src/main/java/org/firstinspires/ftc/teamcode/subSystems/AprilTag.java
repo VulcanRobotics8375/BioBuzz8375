@@ -20,6 +20,9 @@ public class AprilTag extends Subsystem {
     private VisionPortal visionPortal;
 
 
+
+
+
     @Override
     public void init(OpMode opMode) {
         initAprilTag();
@@ -38,19 +41,25 @@ public class AprilTag extends Subsystem {
                 .build();
     }
 
-    public void turret() {
+    public int turret() {
         List<AprilTagDetection> tagsDetected = aprilTag.getDetections();
-        AprilTagDetection closestTag = null;
-        double minValue = 1000;
+        int update = 0;
+        int amountOfAprilTags = 0;
+        int count = 0;
         for (AprilTagDetection detection : tagsDetected) {
-            double distance = detection.ftcPose.range;
-            if (detection.metadata == null) {
-                break;
+            if (detection.metadata != null) {
+                amountOfAprilTags += detection.ftcPose.range;
+                count++;
             }
-            if (distance < minValue) {
-                minValue = distance;
-                closestTag = detection;
+            if (count == 0) {
+                return -1; // something else could be used, -1 just means there is no apriltags found
+            } else {
+                update = amountOfAprilTags/count; // this variable holds the avg distance
+                return update;
             }
+
         }
+        return (amountOfAprilTags / count);
     }
+
 }
