@@ -28,7 +28,7 @@ android {
 
     packagingOptions {
         jniLibs {
-            pickFirsts += ['**/*.so']
+            pickFirsts += ['**/*.so', '**/*.so']
         }
 
 
@@ -40,12 +40,14 @@ repositories {
     maven {
         url = 'https://maven.brott.dev/'
     }
+    maven { url 'https://jitpack.io' }
 //    maven {
 //        url = "https://mymaven.bylazar.com/releases"
 //    }
 }
 
 dependencies {
+    implementation 'com.github.Singularity-Technology:RTPAxon:v1.0.0'
     implementation project(':FtcRobotController')
     implementation "com.acmerobotics.dashboard:dashboard:0.5.1"
 //    implementation 'org.openftc:easyopencv:1.7.3'
