@@ -101,7 +101,6 @@ public class turret extends Subsystem {
         finalPower = Math.max(Math.min(finalPower, 1), -1);
         turretServo1.setPower(finalPower);
         turretServo2.setPower(finalPower);
-
     }
 
 }
