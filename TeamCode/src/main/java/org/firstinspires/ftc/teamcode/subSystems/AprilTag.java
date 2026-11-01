@@ -71,9 +71,10 @@ public class AprilTag extends Subsystem {
 
             public void localize () {
                 List<AprilTagDetection> tagsDetected = aprilTag.getDetections();
-                double X;
-                double Y;
+                double X = 0.0;
+                double Y = 0.0;
                 int count = 0;
+
 
                 for (AprilTagDetection detection : tagsDetected )
                     if (detection.metadata != null && detection.robotPose != null) {
