@@ -7,6 +7,7 @@ import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.CRServo;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 
@@ -21,8 +22,8 @@ public class turret extends Subsystem {
     //set: targetx, targety, kP,kD, sync servos
     //outputs: d, vtan, wturret, theta, pError, vError
     public static final double TICKS_PER_TURRET_RAD = 8192 * (96.0 / 34.0) / (2 * Math.PI), DEADBAND = 0.05;
-    DcMotorEx encoder;
-    CRServo turretServo1, turretServo2;
+    public DcMotorEx encoder;
+    public CRServo turretServo1, turretServo2;
 
 
     @Override
@@ -31,6 +32,7 @@ public class turret extends Subsystem {
         encoder = hardwareMap.get(DcMotorEx.class, "tEnc");
         turretServo1 = hardwareMap.get(CRServo.class, "tServo1");
         turretServo2 = hardwareMap.get(CRServo.class, "tServo2");
+        turretServo1.setDirection(DcMotorSimple.Direction.REVERSE);
         encoder.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         encoder.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
     }

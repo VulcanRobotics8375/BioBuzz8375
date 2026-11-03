@@ -47,7 +47,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'com.github.Singularity-Technology:RTPAxon:v1.0.0'
+//    implementation 'com.github.Singularity-Technology:RTPAxon:v1.0.0'
     implementation project(':FtcRobotController')
     implementation "com.acmerobotics.dashboard:dashboard:0.5.1"
     testImplementation 'junit:junit:4.13.2'

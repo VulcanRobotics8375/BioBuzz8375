@@ -15,7 +15,7 @@ import com.acmerobotics.dashboard.config.Config;
 @Config //so we can tune using the FTC dashboard
 public class fieldCentricMecanum extends Subsystem{
     //private Telemetry telemetry;
-    GoBildaPinpointDriver odo; // Declare OpMode member for the Odometry Computer
+    public GoBildaPinpointDriver odo; // Declare   OpMode member for the Odometry Computer
     double oldTime = 0;
     //Motor and pinpoint declaration
     private DcMotor frontLeftDrive, backLeftDrive, frontRightDrive, backRightDrive;
