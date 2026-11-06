@@ -28,6 +28,27 @@ public class MiscMotor extends Subsystem {
                 telemetry.addLine("on");
             }
         }
-
+        if (gamepad2.xWasPressed()) {
+            if (isOn) {
+                isOn = false;
+                Motor.setPower(0.0);
+                telemetry.addLine("off");
+            } else {
+                isOn = true;
+                revIsOn = false;
+                Motor.setPower(-1.0);
+                telemetry.addLine("on");
+            }
+        }
+        if (gamepad2.rightBumperWasPressed()) {
+            Motor.getPower();
+            Motor.setPower(Motor.getPower() + 0.1);
+            telemetry.addLine("Motor Power:" + Motor.getPower());
+        }
+        if (gamepad2.leftBumperWasPressed()) {
+            Motor.getPower();
+            Motor.setPower(Motor.getPower() -0.1);
+            telemetry.addLine("Motor Power:" + Motor.getPower());
+        }
     }
 }

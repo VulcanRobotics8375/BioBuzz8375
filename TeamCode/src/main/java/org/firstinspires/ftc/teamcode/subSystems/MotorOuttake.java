@@ -82,6 +82,7 @@ public class MotorOuttake extends Subsystem {
         dashboard.sendTelemetryPacket(packet);
         telemetry.addData("rpm", rpm);
     }
+
 }
 
 
