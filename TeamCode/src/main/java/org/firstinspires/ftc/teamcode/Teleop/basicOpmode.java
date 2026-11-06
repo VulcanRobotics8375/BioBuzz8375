@@ -1,0 +1,43 @@
+package org.firstinspires.ftc.teamcode.Teleop;
+
+
+import com.qualcomm.robotcore.eventloop.opmode.OpMode;
+import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+
+
+import org.firstinspires.ftc.teamcode.subSystems.Intake;
+import org.firstinspires.ftc.teamcode.subSystems.Transfer;
+import org.firstinspires.ftc.teamcode.subSystems.outtake;
+import org.firstinspires.ftc.teamcode.subSystems.MotorOuttake;
+import org.firstinspires.ftc.teamcode.subSystems.fieldCentricMecanum;
+
+@TeleOp
+public class basicOpmode extends OpMode {
+    private double axial, lateral, yaw;
+    fieldCentricMecanum drive = new fieldCentricMecanum();
+    Intake Intake = new Intake();
+    outtake outtake = new outtake();
+
+    MotorOuttake Outtake = new MotorOuttake();
+    public void init(){
+        drive.instantiateSubsystem(this);
+        Intake.instantiateSubsystem(this);
+        outtake.instantiateSubsystem(this);
+        drive.init(this);
+        Intake.init(this);
+        outtake.init(this);
+    }
+
+    @Override
+    public void loop() {
+        axial = -gamepad1.left_stick_y;
+        lateral = gamepad1.left_stick_x;
+        yaw = gamepad1.right_stick_x;
+
+        drive.fieldCentric(axial, lateral, yaw);
+        Intake.runIntake();
+        outtake.runOuttake();
+        telemetry.update();
+    }
+
+}

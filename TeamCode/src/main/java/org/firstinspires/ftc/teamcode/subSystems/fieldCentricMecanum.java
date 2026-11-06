@@ -15,7 +15,7 @@ import com.acmerobotics.dashboard.config.Config;
 @Config //so we can tune using the FTC dashboard
 public class fieldCentricMecanum extends Subsystem{
     //private Telemetry telemetry;
-    GoBildaPinpointDriver odo; // Declare OpMode member for the Odometry Computer
+    public GoBildaPinpointDriver odo; // Declare   OpMode member for the Odometry Computer
     double oldTime = 0;
     //Motor and pinpoint declaration
     private DcMotor frontLeftDrive, backLeftDrive, frontRightDrive, backRightDrive;
@@ -36,9 +36,9 @@ public class fieldCentricMecanum extends Subsystem{
         odo = hardwareMap.get(GoBildaPinpointDriver.class,"odo");
 
         //odo.setOffsets(-142.93, 30.469, DistanceUnit.MM);
-        odo.setOffsets(-156.626489257812, 42.521887207031, DistanceUnit.MM);
+        odo.setOffsets(-3.278, -2.778, DistanceUnit.INCH);
         odo.setEncoderResolution(74.5027025034, DistanceUnit.MM);
-        odo.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.FORWARD, GoBildaPinpointDriver.EncoderDirection.FORWARD);
+        odo.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.REVERSED, GoBildaPinpointDriver.EncoderDirection.FORWARD);
         odo.resetPosAndIMU();
 
         //set directions (stole from DriveTrainTest hopefully works) -- needed to reverse them -- zld
