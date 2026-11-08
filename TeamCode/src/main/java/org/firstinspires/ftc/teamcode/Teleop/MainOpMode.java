@@ -2,6 +2,7 @@ package org.firstinspires.ftc.teamcode.Teleop;
 
 import static org.firstinspires.ftc.robotcore.external.navigation.AngleUnit.normalizeRadians;
 
+import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
@@ -10,58 +11,73 @@ import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit
 import org.firstinspires.ftc.teamcode.auton.GoBildaPinpointDriver;
 import org.firstinspires.ftc.teamcode.subSystems.AprilTag;
 import org.firstinspires.ftc.teamcode.subSystems.MotorOuttake;
+import org.firstinspires.ftc.teamcode.subSystems.Shooter;
 import org.firstinspires.ftc.teamcode.subSystems.fieldCentricMecanum;
 import org.firstinspires.ftc.teamcode.subSystems.Intake;
 import org.firstinspires.ftc.teamcode.subSystems.localizer;
 import org.firstinspires.ftc.teamcode.subSystems.turret;
+import com.bylazar.telemetry.PanelsTelemetry;
+import com.bylazar.telemetry.TelemetryManager;
 import com.bylazar.field.PanelsField;
 import com.bylazar.field.FieldManager;
 
 
 @TeleOp(name="MainOpMode")
     public class MainOpMode extends OpMode {
+    TelemetryManager panels;
     FieldManager field;
     private double axial, lateral, yaw;
     fieldCentricMecanum drive = new fieldCentricMecanum();
     Intake Intake = new Intake();
     MotorOuttake Outtake = new MotorOuttake();
-//    localizer loc = new localizer(-63, -63, 0);
-    localizer loc = new localizer(-0, -0, Math.PI/2);
+    Shooter shooter = new Shooter();
+
+    //    localizer loc = new localizer(-63, -63, 0);
+    localizer loc = new localizer(-63, -63, Math.PI/2);
 
     GoBildaPinpointDriver odo;
     turret turret = new turret();
     AprilTag apriltag = new AprilTag();
     public double prevX, prevY, prevH, dxField, dyField;
     public boolean sawTag;
+    public boolean camOn = true;
+    long lastLoopNanos = System.nanoTime();
 
     public void init() {
+        for (LynxModule hub : hardwareMap.getAll(LynxModule.class)) {
+            hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
+        }
+        panels = PanelsTelemetry.INSTANCE.getTelemetry();
         field = PanelsField.INSTANCE.getField();
         field.setOffsets(PanelsField.INSTANCE.getPresets().getDEFAULT_FTC());
         turret.instantiateSubsystem(this);
         drive.instantiateSubsystem(this);
-        Intake.instantiateSubsystem(this);
-        Outtake.instantiateSubsystem(this);
-        apriltag.instantiateSubsystem(this);
+        shooter.instantiateSubsystem(this);
+//        Intake.instantiateSubsystem(this);
+//        Outtake.instantiateSubsystem(this);
+//        apriltag.instantiateSubsystem(this);
         loc.instantiateSubsystem(this);
         drive.init(this);
-        Intake.init(this);
-        Outtake.init(this);
-//        turret.init(this);
-        apriltag.init(this);
+        shooter.init(this);
+//        Intake.init(this);
+//        Outtake.init(this);
+        turret.init(this);
+//        apriltag.init(this);
         odo = drive.odo;
     }
 
     @Override
     public void loop() {
+        for (LynxModule hub : hardwareMap.getAll(LynxModule.class)) hub.clearBulkCache();
 
         axial = -gamepad1.left_stick_y;
         lateral = gamepad1.left_stick_x;
         yaw = gamepad1.right_stick_x;
 
         drive.fieldCentric(axial, lateral, yaw);
-        Intake.runIntake();
-        Outtake.runOuttake();
-//        turret.tUpdate();
+//        Intake.runIntake();
+//        Outtake.runOuttake();
+        shooter.update();
 
         double dx = odo.getPosX(DistanceUnit.INCH) - prevX;
         double dy = odo.getPosY(DistanceUnit.INCH) - prevY;
@@ -85,36 +101,66 @@ import com.bylazar.field.FieldManager;
         turret.vx = vx * Math.cos(offset) - vy * Math.sin(offset);
         turret.vy = vx * Math.sin(offset) + vy * Math.cos(offset);
         turret.wbot = odo.getHeadingVelocity(UnnormalizedAngleUnit.RADIANS);
-        if (apriltag.localize(/*turret.turretAngle()*/0, loc.getH())) {
-            loc.update(apriltag.camX, apriltag.camY, apriltag.camH);
-            sawTag = true;
-        } else {
-            sawTag = false;
-        }
+        turret.tUpdate();
+
+//        if (apriltag.localize(turret.turretAngle(), loc.getH())) {
+//            if (gamepad2.left_trigger_pressed) {
+//                loc.update(apriltag.camX, apriltag.camY, apriltag.camH);
+//                camOn = true;
+//            } else {
+//                camOn = false;
+//            }
+//            sawTag = true;
+//        } else {
+//            sawTag = false;
+//            camOn = false;
+//        }
         //everything above is tracking
 
         double fx = loc.getX(), fy = loc.getY(), fh = loc.getH();
         field.moveCursor(fx, fy);
-        field.setStyle("black", "blue", 2.0);
+        field.setStyle("black", "red", 1);
         field.circle(9.0);
         field.moveCursor(fx, fy);
-        field.setStyle("red", "red", 2.0);
+        field.setStyle("lightblue", "lightblue", 1);
         field.line(fx + 9 * Math.cos(fh), fy + 9 * Math.sin(fh));
+        double aim = fh + turret.turretAngle();
+        field.moveCursor(fx, fy);
+        field.setStyle("yellow", "yellow", 0.5);
+        field.line(fx + 30 * Math.cos(aim), fy + 30 * Math.sin(aim));
 
-        if (sawTag) {
-            field.moveCursor(apriltag.camX, apriltag.camY);
-            field.setStyle("black", "orange", 2.0);
-            field.circle(5.0);
-            field.moveCursor(apriltag.camX, apriltag.camY);
-            field.setStyle("green", "green", 2.0);
-            field.line(apriltag.camX + 5 * Math.cos(apriltag.camH), apriltag.camY + 5 * Math.sin(apriltag.camH));
-        }
+//        if (sawTag) {
+//            field.moveCursor(apriltag.camX, apriltag.camY);
+//            field.setStyle("black", "orange", 2.0);
+//            field.circle(5.0);
+//            field.moveCursor(apriltag.camX, apriltag.camY);
+//            field.setStyle("green", "green", 2.0);
+//            field.line(apriltag.camX + 5 * Math.cos(apriltag.camH), apriltag.camY + 5 * Math.sin(apriltag.camH));
+//        }
 
-        field.update(); //panels hopefully?
+        //telmetry block
+        field.update();
         telemetry.addData("sawTag:", sawTag).addData("xDiff:", apriltag.camX - loc.getX()).addData("yDiff:", apriltag.camY - loc.getY());
-        ;
         telemetry.addData("offset deg", Math.toDegrees(offset));
-
+        long now = System.nanoTime();
+        telemetry.addData("loop ms", "%.0f", (now - lastLoopNanos) / 1e6);
+        lastLoopNanos = now;
+        telemetry.addData("turret want (deg)", "%.1f", Math.toDegrees(turret.theta));
+        telemetry.addData("turret at (deg)", "%.1f", Math.toDegrees(turret.turretAngle()));
+        telemetry.addData("turret error (deg)", "%.1f", Math.toDegrees(turret.pError));
+        telemetry.addData("reachable", turret.reachable);
+        telemetry.addData("ff / cmd vel (rad/s)", "%.2f / %.2f", turret.wturret, turret.wCmd);
+        telemetry.addData("actual vel (rad/s)", "%.2f", turret.tVelocity());
+        telemetry.addData("turret power", "%.2f", turret.lastPower);
+        telemetry.addData("turret FAULT", turret.faulted ? "YES: " + turret.faultReason : "no");
+        telemetry.addData("kP / kD", "%.3f / %.5f", turret.kP, turret.kD);
+        telemetry.addData("robot x, y, h", "%.1f, %.1f, %.1f", loc.getX(), loc.getY(), Math.toDegrees(loc.getH()));
+        panels.addData("turret error (deg)", Math.toDegrees(turret.pError));
+        panels.addData("turret target (deg)", Math.toDegrees(turret.theta));
+        panels.addData("turret at (deg)", Math.toDegrees(turret.turretAngle()));
+        panels.addData("turret power", turret.lastPower);
+        panels.addData("dist to goal (in)", turret.d);
+        panels.update();
         telemetry.update();
     }
 }

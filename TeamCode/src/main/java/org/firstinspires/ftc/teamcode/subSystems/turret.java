@@ -11,6 +11,7 @@ import com.qualcomm.robotcore.hardware.CRServoImplEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.PwmControl;
 
+
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 
 import robotcore.Subsystem;
@@ -20,13 +21,31 @@ public class turret extends Subsystem {
     public static final double MIN_ANGLE = Math.toRadians(-200);
     public static final double MAX_ANGLE = Math.toRadians(200);
     public boolean reachable = false;
-    public double wturret, theta, wbot, vtan, d, targety=-18.5805750382, targetx=12.75, x, y, kS=0.1083424, kV=0.09881655, vx, vy, heading, pError, vError, virX, virY;
-    public static double kP, kD;
+    public double wturret, theta, wbot, vtan, d, targety=-18.5805750382, targetx=12.75, x, y, vx, vy, heading, pError, vError, virX, virY;
+//    public static double kP = 3.5, kD=0.08;   // kP is now (rad/s asked for) per (rad of error)
+    public static double kP = 6.2, kD=0.065;   // kP is now (rad/s asked for) per (rad of error)
+
+    public double wCmd;                // total speed asked for = feedforward + kP * error
+    public double lastPower;           // power actually sent to the servos (for telemetry)
+    // ---- wire safety ----
+    public static double SAFETY_DEG = 170;    // never push further out past this
+    public static double STALL_POWER = 0.3;   // "trying hard" threshold
+    public static double STALL_S = 0.5;       // trying hard but not moving this long -> FAULT
+    public boolean faulted = false;           // latched: turret stays off until the OpMode restarts
+    public String faultReason = "";
+    private long stallStartNanos = -1, wrongWayStartNanos = -1;
+    // Feedforward per direction (fit: power = kV * |vel| + kS). POS = turret turning CCW (angle up).
+    // Swapped after the servo flip so each value stays with the same PHYSICAL direction.
+    // Re-run Turret Characterize to confirm.
+//    public static double kS_POS = 0.18, kV_POS = 0.105;
+//    public static double kS_NEG = 0.27, kV_NEG = 0.09;
+    public static double kS_POS = 0.215, kV_POS = 0.06;
+    public static double kS_NEG = 0.153, kV_NEG = 0.1;
     //inputs: x, y, heading, vx, vy, wbot,
     //set: targetx, targety, kP,kD, sync servos
     //outputs: d, vtan, wturret, theta, pError, vError,virtualX, virtualY
     // Negative: encoder counts opposite to turret CCW-positive (verified in TurretCharacterize)
-    public static final double TICKS_PER_TURRET_RAD = -8192 * (96.0 / 34.0) / (2 * Math.PI), DEADBAND = 0.05;
+    public static final double TICKS_PER_TURRET_RAD = -1 * 8192 * (96.0 / 34.0) / (2 * Math.PI), DEADBAND = 0.05;
 
     // Servo pulse range (microseconds). SDK default is 600-2400.
     // After the fine sweep, set to 1500 -/+ 900 * p_sat so power +/-1 = servo full speed.
@@ -45,16 +64,27 @@ public class turret extends Subsystem {
     @Override
     public void init(OpMode opMode) {
         instantiateSubsystem(opMode);
-        encoder = hardwareMap.get(DcMotorEx.class, "tEnc");
+        encoder = hardwareMap.get(DcMotorEx.class, "leftFront");
         turretServo1 = hardwareMap.get(CRServoImplEx.class, "tServo1");
         turretServo2 = hardwareMap.get(CRServoImplEx.class, "tServo2");
-        turretServo1.setDirection(DcMotorSimple.Direction.REVERSE);
+        // Positive power must turn the turret CCW (angle goes UP). Both flipped together
+        // so the two servos still agree with each other.
+        turretServo1.setDirection(DcMotorSimple.Direction.FORWARD);
+        turretServo2.setDirection(DcMotorSimple.Direction.REVERSE);
         turretServo1.setPwmRange(new PwmControl.PwmRange(PWM_LOW, PWM_HIGH));
         turretServo2.setPwmRange(new PwmControl.PwmRange(PWM_LOW, PWM_HIGH));
         encoder.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
         encoder.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         lastTicks = 0;
         lastNanos = System.nanoTime();
+    }
+
+    /** Raw encoder count, no matter what direction another subsystem set on this motor port.
+     *  (The encoder shares the "leftFront" drive port, and the drive REVERSEs that motor,
+     *   which would otherwise flip this reading in MainOpMode but not in the test OpModes.) */
+    private int rawTicks() {
+        int ticks = encoder.getCurrentPosition();
+        return encoder.getDirection() == DcMotorSimple.Direction.REVERSE ? -ticks : ticks;
     }
 
     public void setPower(double power) {
@@ -64,7 +94,7 @@ public class turret extends Subsystem {
 
     /** Call exactly once per loop, before using tVelocity(). */
     public void updateVelocity() {
-        int ticks = encoder.getCurrentPosition();
+        int ticks = rawTicks();
         long now = System.nanoTime();
         double dt = (now - lastNanos) / 1e9;
         if (dt > 0) {
@@ -75,8 +105,8 @@ public class turret extends Subsystem {
     }
 
     public double turretAngle() {
-        return 0;
-//        return encoder.getCurrentPosition() / TICKS_PER_TURRET_RAD;  // rad, relative to where it was zeroed
+//        return 0;
+        return rawTicks() / TICKS_PER_TURRET_RAD;  // rad, relative to where it was zeroed
     } // turrent angle from encoder
 
     public void track() {
@@ -122,7 +152,11 @@ public class turret extends Subsystem {
             return 0;
         }
         double w = velocity, power;
-        power = (kS * Math.signum(w)) + (kV * w); //kS = power to start moving; kV = slope; w = turret speed wanted
+        if (w > 0) {
+            power = kS_POS + kV_POS * w;    // kS = power to start moving; kV = power per rad/s
+        } else {
+            power = -kS_NEG + kV_NEG * w;   // w is negative here, so both terms are negative
+        }
         power = Math.max(Math.min(power, 1), -1);
         return power;
     }
@@ -133,13 +167,48 @@ public class turret extends Subsystem {
         track();
         pidCalc(current);
         double ff = wturret;
-        if (!reachable) ff = 0;                          // parked at a limit
-        if (current >= MAX_ANGLE && ff > 0) ff = 0;      // don't push past the top stop
-        if (current <= MIN_ANGLE && ff < 0) ff = 0;
-        vError = ff - tVelocity(); // ...or the bottom one
+        if (!reachable) ff = 0;                          // parked at a limit: no feedforward
+
+        // P becomes part of the speed we ask for, so velToPower's kS helps it beat friction
+        wCmd = ff + kP * pError;                         // rad/s
+        if (current >= MAX_ANGLE && wCmd > 0) wCmd = 0;  // don't push past the top stop
+        if (current <= MIN_ANGLE && wCmd < 0) wCmd = 0;  // ...or the bottom one
+
+        vError = wCmd - tVelocity();                     // D: damp the difference from the asked-for speed
         double finalPower;
-        finalPower = velToPower(ff) + kP * pError + kD * vError;
+        finalPower = velToPower(wCmd) + kD * vError;
         finalPower = Math.max(Math.min(finalPower, 1), -1);
+
+        // ---- wire safety ----
+        // 1. over-travel: never push further out past SAFETY_DEG (pushing back in is allowed)
+        if (Math.abs(current) > Math.toRadians(SAFETY_DEG) && Math.signum(finalPower) == Math.signum(current)) {
+            finalPower = 0;
+        }
+        // 2. encoder unplugged / wrong sign / jammed: pushing hard but not moving -> latch off
+        if (Math.abs(finalPower) > STALL_POWER && Math.abs(tVelocity()) < 0.05) {
+            if (stallStartNanos < 0) stallStartNanos = System.nanoTime();
+            if ((System.nanoTime() - stallStartNanos) / 1e9 > STALL_S) {
+                faulted = true;
+                faultReason = String.format("stalled at %.0f deg, power %.2f", Math.toDegrees(current), finalPower);
+            }
+        } else {
+            stallStartNanos = -1;
+        }
+        // 3. wrong sign: pushing one way but moving fast the OTHER way -> latch off
+        if (Math.abs(finalPower) > STALL_POWER && Math.abs(tVelocity()) > 1.0
+                && Math.signum(tVelocity()) != Math.signum(finalPower)) {
+            if (wrongWayStartNanos < 0) wrongWayStartNanos = System.nanoTime();
+            if ((System.nanoTime() - wrongWayStartNanos) / 1e9 > 0.25) {
+                faulted = true;
+                faultReason = String.format("WRONG WAY: power %.2f but moving %.1f rad/s at %.0f deg",
+                        finalPower, tVelocity(), Math.toDegrees(current));
+            }
+        } else {
+            wrongWayStartNanos = -1;
+        }
+        if (faulted) finalPower = 0;
+
+        lastPower = finalPower;
         setPower(finalPower);
     }
 

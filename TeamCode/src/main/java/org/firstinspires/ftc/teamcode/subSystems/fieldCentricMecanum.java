@@ -18,7 +18,7 @@ public class fieldCentricMecanum extends Subsystem{
     public GoBildaPinpointDriver odo; // Declare   OpMode member for the Odometry Computer
     double oldTime = 0;
     //Motor and pinpoint declaration
-    private DcMotor frontLeftDrive, backLeftDrive, frontRightDrive, backRightDrive;
+    public DcMotor frontLeftDrive, backLeftDrive, frontRightDrive, backRightDrive;
 
     // Heading Lock Variables
     private double headingSetpoint = 0.0;
