@@ -8,6 +8,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit;
 import org.firstinspires.ftc.teamcode.auton.GoBildaPinpointDriver;
+import org.firstinspires.ftc.teamcode.subSystems.MainFlywheel;
 import org.firstinspires.ftc.teamcode.subSystems.MotorOuttake;
 import org.firstinspires.ftc.teamcode.subSystems.fieldCentricMecanum;
 import org.firstinspires.ftc.teamcode.subSystems.Intake;
@@ -55,7 +56,8 @@ import com.bylazar.field.FieldManager;
 
         drive.fieldCentric(axial, lateral, yaw);
         Intake.runIntake();
-        Outtake.runOuttake();
+        MainFlywheel.runFlywheel();
+        // Outtake.runOuttake();
 //        turret.tUpdate();
 
         double dx = odo.getPosX(DistanceUnit.INCH) - prevX;
