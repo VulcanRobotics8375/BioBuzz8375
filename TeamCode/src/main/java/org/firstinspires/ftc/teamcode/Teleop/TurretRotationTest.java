@@ -17,8 +17,8 @@ public class TurretRotationTest extends OpMode {
 
     @Override
     public void loop() {
-        t.turretServo1.setPower(gamepad1.right_stick_x);
-        t.turretServo2.setPower(gamepad1.right_stick_x);
+        t.updateVelocity();
+        t.setPower(gamepad1.right_stick_x);
 
         telemetry.addData("Angle (deg)", Math.toDegrees(t.turretAngle()));
         telemetry.addData("Velocity (rad/s)", t.tVelocity());

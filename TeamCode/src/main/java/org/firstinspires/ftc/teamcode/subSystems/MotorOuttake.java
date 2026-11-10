@@ -1,15 +1,15 @@
 package org.firstinspires.ftc.teamcode.subSystems;
 
 import com.acmerobotics.dashboard.FtcDashboard;
-import com.acmerobotics.dashboard.config.Config;
 import com.acmerobotics.dashboard.telemetry.TelemetryPacket;
+import com.bylazar.configurables.annotations.Configurable;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
 import robotcore.Subsystem;
-@Config
+@Configurable
 public class MotorOuttake extends Subsystem {
     boolean isOn;
     public DcMotorEx OuttakeMotor;

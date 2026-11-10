@@ -1,95 +1,113 @@
 package org.firstinspires.ftc.teamcode.Teleop;
 
+import com.bylazar.configurables.annotations.Configurable;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
-import com.qualcomm.robotcore.hardware.CRServo;
-import com.qualcomm.robotcore.hardware.DcMotor;
-import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
+import org.firstinspires.ftc.teamcode.subSystems.turret;
+
+/**
+ * Measures steady-state turret speed at a list of powers.
+ * All hardware setup (servo directions, encoder sign, PWM range) comes from turret.init(),
+ * so this test always matches the real robot code.
+ *
+ * Wiring: powers alternate +/-, so each run unwinds the last one. Power is cut the moment
+ * the turret passes +/-LIMIT_DEG; the speed measured up to that point is still used.
+ * Point the turret straight forward BEFORE init (encoder zeroes at init).
+ */
+@Configurable
 @TeleOp(name = "Turret Characterize", group = "Test")
 public class TurretCharacterize extends LinearOpMode {
 
-    // 8192 ticks per middle-axle rev, axle turns 96/34 revs per turret rev
-    static final double TICKS_PER_TURRET_RAD = 8192.0 * (96.0 / 34.0) / (2 * Math.PI);
+    public static double LIMIT_DEG = 150;   // cut power past this (from where it was zeroed)
+    public static double SETTLE_S = 0.2;    // let speed stabilize before measuring
+    public static double MEASURE_S = 1.0;   // measure up to this long (or until the limit)
 
-    // Safety limit: cut power if the turret gets this far from where it started (rad).
-    // SET THIS below your real wiring limit. 2.0 rad ≈ 115°.
-    static final double LIMIT_RAD = 2.0;
+    // true  = fine sweep 0.05..0.5 to find p_sat (where speed stops increasing)
+    // false = coarse sweep 0.2..1.0 for fitting kS/kV
+    public static boolean FINE_SWEEP = false;
 
-    static final double SETTLE_S = 0.5;   // let speed stabilize
-    static final double MEASURE_S = 0.3;  // average over this window
+    public static double[] FINE = {0.05, -0.05, 0.1, -0.1, 0.15, -0.15, 0.2, -0.2, 0.25, -0.25,
+                                   0.3, -0.3, 0.35, -0.35, 0.4, -0.4, 0.45, -0.45, 0.5, -0.5};
+    public static double[] COARSE = {0.2, -0.2, 0.35, -0.35, 0.5, -0.5, 0.65, -0.65, 0.8, -0.8, 1, -1};
 
-    // Paired +/- so the turret ends up roughly where it started
-    static final double[] POWERS = {0.2, -0.2, 0.35, -0.35, 0.5, -0.5, 0.65, -0.65};
-
-    DcMotorEx encoder;
-    CRServo s1, s2;
+    turret t = new turret();
 
     @Override
     public void runOpMode() {
-        // ---------- 1. INIT: runs when you press INIT ----------
-        encoder = hardwareMap.get(DcMotorEx.class, "tEnc");
-        s1 = hardwareMap.get(CRServo.class, "tServo1");
-        s2 = hardwareMap.get(CRServo.class, "tServo2");
-        // s2.setDirection(DcMotorSimple.Direction.REVERSE); // uncomment if mounted mirrored
+        // ---------- 1. INIT ----------
+        t.init(this);   // directions, encoder sign, PWM range, encoder reset
+        double[] powers = FINE_SWEEP ? FINE : COARSE;
 
-        // Zero the encoder with the turret centered
-        encoder.setMode(DcMotor.RunMode.STOP_AND_RESET_ENCODER);
-        encoder.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
-
-        telemetry.addLine("Center the turret, then press START");
+        telemetry.addLine("Point turret straight forward, then press START");
+        telemetry.addData("Sweep", FINE_SWEEP ? "FINE (find p_sat)" : "COARSE (fit kS/kV)");
+        telemetry.addData("Limit", "+/- %.0f deg", LIMIT_DEG);
         telemetry.update();
 
-        // ---------- 2. WAIT: blocks here until you press START ----------
+        // ---------- 2. WAIT ----------
         waitForStart();
 
-        // ---------- 3. RUN: your test, top to bottom, once ----------
-        double[] results = new double[POWERS.length];
-        boolean[] hitLimit = new boolean[POWERS.length];
+        // ---------- 3. RUN ----------
+        double[] results = new double[powers.length];
+        String[] notes = new String[powers.length];
 
-        for (int i = 0; i < POWERS.length && opModeIsActive(); i++) {
-            double power = POWERS[i];
-            setPower(power);
+        for (int i = 0; i < powers.length && opModeIsActive(); i++) {
+            double power = powers[i];
+            notes[i] = "";
+            t.setPower(power);
 
-            ElapsedTime t = new ElapsedTime();
-            double sum = 0;
-            int n = 0;
+            ElapsedTime timer = new ElapsedTime();
+            boolean measuring = false;
+            double startAngle = 0, startTime = 0;
+            double endAngle = 0, endTime = 0;
 
-            while (opModeIsActive() && t.seconds() < SETTLE_S + MEASURE_S) {
-                if (Math.abs(angle()) > LIMIT_RAD) {   // safety first
-                    hitLimit[i] = true;
+            while (opModeIsActive() && timer.seconds() < SETTLE_S + MEASURE_S) {
+                t.updateVelocity();
+                double angle = t.turretAngle();
+
+                // wire safety: only stop if it's heading further OUT past the limit
+                if (Math.abs(Math.toDegrees(angle)) > LIMIT_DEG && Math.signum(angle) == Math.signum(power)) {
+                    notes[i] = " (hit limit)";
                     break;
                 }
-                if (t.seconds() > SETTLE_S) {          // only average after settling
-                    sum += velocity();
-                    n++;
+                // Average speed = total angle moved / time.
+                if (timer.seconds() > SETTLE_S) {
+                    if (!measuring) {
+                        measuring = true;
+                        startAngle = angle;
+                        startTime = timer.seconds();
+                    }
+                    endAngle = angle;
+                    endTime = timer.seconds();
                 }
-                telemetry.addData("Run", "%d / %d  power %.2f", i + 1, POWERS.length, power);
-                telemetry.addData("Angle (deg)", "%.1f", Math.toDegrees(angle()));
-                telemetry.addData("Vel (rad/s)", "%.2f", velocity());
+                telemetry.addData("Run", "%d / %d  power %+.2f", i + 1, powers.length, power);
+                telemetry.addData("Angle (deg)", "%.1f", Math.toDegrees(angle));
+                telemetry.addData("Vel (rad/s)", "%.2f", t.tVelocity());
                 telemetry.update();
             }
 
-            setPower(0);
-            results[i] = (n > 0) ? sum / n : Double.NaN;
+            t.setPower(0);
+            double dt = endTime - startTime;
+            if (measuring && dt > 0.05) {
+                results[i] = (endAngle - startAngle) / dt;
+            } else {
+                results[i] = Double.NaN;
+                notes[i] += " no data: hit limit during settle (lower SETTLE_S)";
+            }
             sleep(500); // let it stop before reversing
         }
 
-        setPower(0);
+        t.setPower(0);
 
-        // ---------- 4. SHOW RESULTS: keep them on screen until STOP ----------
+        // ---------- 4. SHOW RESULTS ----------
         while (opModeIsActive()) {
-            for (int i = 0; i < POWERS.length; i++) {
-                telemetry.addData(String.format("power %+.2f", POWERS[i]),
-                        hitLimit[i] ? "HIT LIMIT (shorten SETTLE/MEASURE or lower power)"
-                                : String.format("%.3f rad/s", results[i]));
+            telemetry.addLine("Fit each direction: x = |vel|, y = |power|  ->  kV = slope, kS = intercept");
+            for (int i = 0; i < powers.length; i++) {
+                telemetry.addData(String.format("power %+.2f", powers[i]),
+                        String.format("%.3f rad/s%s", results[i], notes[i]));
             }
             telemetry.update();
         }
     }
-
-    double angle()    { return encoder.getCurrentPosition() / TICKS_PER_TURRET_RAD; }
-    double velocity() { return encoder.getVelocity() / TICKS_PER_TURRET_RAD; }
-    void setPower(double p) { s1.setPower(p); s2.setPower(p); }
 }

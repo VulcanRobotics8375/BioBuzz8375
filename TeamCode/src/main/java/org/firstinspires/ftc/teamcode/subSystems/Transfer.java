@@ -8,33 +8,21 @@ import robotcore.Subsystem;
 public class Transfer extends Subsystem {
 
     private Servo TransferServo = null; //actually its the adaptive hood servo
-    private Servo HoodServo = null;
 
 
     @Override
     public void init(OpMode opMode) {
         instantiateSubsystem(opMode);
         TransferServo = hardwareMap.get(Servo.class, "transfer_servo");
-        HoodServo = hardwareMap.get(Servo.class, "hood_servo");
     }
     public void runTransfer() {
         TransferServo.getPosition();
         telemetry.addData("ServoAngleOne", TransferServo);
-        if (gamepad1.rightBumperWasPressed()) {
-            double update = TransferServo.getPosition();
-            TransferServo.setPosition(update + 0.01);
-        }
-        if (gamepad1.leftBumperWasPressed()) {
-            double update2 = TransferServo.getPosition();
-            TransferServo.setPosition(update2 - 0.01);
-        }
 
-        if (gamepad1.x) {
-            TransferServo.setPosition(0.9);
-            HoodServo.setPosition(0.0f);
+        if (gamepad2.left_bumper) {
+            TransferServo.setPosition(0.65);
         } else {
-            TransferServo.setPosition(0.0);
-            HoodServo.setPosition(0.3);
+            TransferServo.setPosition(0.4);
         }
     }
 }

@@ -18,7 +18,7 @@ public class fieldCentricMecanum extends Subsystem{
     public GoBildaPinpointDriver odo; // Declare   OpMode member for the Odometry Computer
     double oldTime = 0;
     //Motor and pinpoint declaration
-    private DcMotor frontLeftDrive, backLeftDrive, frontRightDrive, backRightDrive;
+    public DcMotor frontLeftDrive, backLeftDrive, frontRightDrive, backRightDrive;
 
     // Heading Lock Variables
     private double headingSetpoint = 0.0;
@@ -36,9 +36,9 @@ public class fieldCentricMecanum extends Subsystem{
         odo = hardwareMap.get(GoBildaPinpointDriver.class,"odo");
 
         //odo.setOffsets(-142.93, 30.469, DistanceUnit.MM);
-        odo.setOffsets(2.7107889971395167, 1.3714638056717519, DistanceUnit.INCH);
+        odo.setOffsets(-3.278, -2.778, DistanceUnit.INCH);
         odo.setEncoderResolution(74.5027025034, DistanceUnit.MM);
-        odo.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.FORWARD, GoBildaPinpointDriver.EncoderDirection.FORWARD);
+        odo.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.REVERSED, GoBildaPinpointDriver.EncoderDirection.FORWARD);
         odo.resetPosAndIMU();
 
         //set directions (stole from DriveTrainTest hopefully works) -- needed to reverse them -- zld

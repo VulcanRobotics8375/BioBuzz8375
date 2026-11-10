@@ -6,38 +6,42 @@ import static org.firstinspires.ftc.robotcore.external.BlocksOpModeCompanion.tel
 
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
+import com.qualcomm.robotcore.hardware.CRServoImplEx;
 import com.qualcomm.robotcore.hardware.Servo;
+
+import org.firstinspires.ftc.teamcode.subSystems.Transfer;
 
 import robotcore.Subsystem;
 @TeleOp(name= "TransferTest")
-public class TransferTest  {
+public class TransferTest  extends OpMode {
+private Servo TransferServo = null; //actually its the adaptive hood servo {
+    public double angle;
 
-        private Servo TransferServo = null; //actually its the adaptive hood servo
-        private Servo HoodServo = null;
 
-        public void init(OpMode opMode) {
+    @Override
+    public void init() {
             TransferServo = hardwareMap.get(Servo.class, "transfer_servo");
-            HoodServo = hardwareMap.get(Servo.class, "hood_servo");
-        }
-    public void runTransfer() {
-        TransferServo.getPosition();
-        telemetry.addData("ServoAngleOne", TransferServo);
-        if (gamepad1.rightBumperWasPressed()) {
-            double update = TransferServo.getPosition();
-            TransferServo.setPosition(update + 0.01);
-        }
-        if (gamepad1.leftBumperWasPressed()) {
-            double update2 = TransferServo.getPosition();
-            TransferServo.setPosition(update2 - 0.01);
+            angle = TransferServo.getPosition();
         }
 
-        if (gamepad1.x) {
-            TransferServo.setPosition(0.9);
-            HoodServo.setPosition(0.0f);
-        } else {
-            TransferServo.setPosition(0.0);
-            HoodServo.setPosition(0.3);
-        }
+    @Override
+    public void loop() {
+            telemetry.addData("ServoAngleOne", angle);
+            if (gamepad1.rightBumperWasPressed()) {
+                angle += 0.01;
+            }
+            if (gamepad1.leftBumperWasPressed()) {
+                angle -= 0.01;
+            }
+            if (gamepad1.bWasPressed()) {
+                telemetry.addData("ServoAngleTwo", angle);
+            }
+            TransferServo.setPosition(angle);
+            telemetry.update();
+
     }
-    }
+}
+
+
+
 
