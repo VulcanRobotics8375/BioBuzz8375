@@ -41,6 +41,8 @@ import com.bylazar.field.FieldManager;
     public double prevX, prevY, prevH, dxField, dyField;
     public boolean sawTag;
     public boolean camOn = true;
+    public boolean alliance = true; //true = blue, red = false
+
     long lastLoopNanos = System.nanoTime();
 
     public void init() {
@@ -70,14 +72,34 @@ import com.bylazar.field.FieldManager;
     public void loop() {
         for (LynxModule hub : hardwareMap.getAll(LynxModule.class)) hub.clearBulkCache();
 
-        axial = -gamepad1.left_stick_y;
-        lateral = gamepad1.left_stick_x;
-        yaw = gamepad1.right_stick_x;
+        axial = gamepad1.left_stick_y;
+        lateral = -gamepad1.left_stick_x;
+        yaw = -gamepad1.right_stick_x;
 
         drive.fieldCentric(axial, lateral, yaw);
 //        Intake.runIntake();
 //        Outtake.runOuttake();
-        shooter.update();
+
+        if (gamepad2.rightBumperWasPressed()) {
+            alliance = !alliance;
+        }
+
+        if (alliance) { //BLUE
+            if (loc.getY() <= 0){
+                turret.targetUpdate("ba");
+            } else {
+                turret.targetUpdate("bs");
+
+            }
+        } else {
+            if (loc.getY() <= 0){ //red
+                turret.targetUpdate("ra");
+            } else {
+                turret.targetUpdate("rs");
+
+            }
+        }
+
 
         double dx = odo.getPosX(DistanceUnit.INCH) - prevX;
         double dy = odo.getPosY(DistanceUnit.INCH) - prevY;
@@ -101,7 +123,11 @@ import com.bylazar.field.FieldManager;
         turret.vx = vx * Math.cos(offset) - vy * Math.sin(offset);
         turret.vy = vx * Math.sin(offset) + vy * Math.cos(offset);
         turret.wbot = odo.getHeadingVelocity(UnnormalizedAngleUnit.RADIANS);
-        turret.tUpdate();
+        turret.tUpdate();          // also computes the virtual goal + turret.d (virtual distance)
+
+        // shooter AFTER the turret, so RPM/hood use this loop's (virtual) distance
+        shooter.setShot(turret.d); // only does something when Shooter.AUTO_SHOT = true
+        shooter.update();
 
 //        if (apriltag.localize(turret.turretAngle(), loc.getH())) {
 //            if (gamepad2.left_trigger_pressed) {
@@ -140,6 +166,11 @@ import com.bylazar.field.FieldManager;
 
         //telmetry block
         field.update();
+        if (alliance){
+            telemetry.addData("alliance:", "BLUE");
+        } else{
+            telemetry.addData("alliance:", "RED");
+        }
         telemetry.addData("sawTag:", sawTag).addData("xDiff:", apriltag.camX - loc.getX()).addData("yDiff:", apriltag.camY - loc.getY());
         telemetry.addData("offset deg", Math.toDegrees(offset));
         long now = System.nanoTime();
@@ -160,6 +191,15 @@ import com.bylazar.field.FieldManager;
         panels.addData("turret at (deg)", Math.toDegrees(turret.turretAngle()));
         panels.addData("turret power", turret.lastPower);
         panels.addData("dist to goal (in)", turret.d);
+        panels.addData("real dist (in)", turret.dReal);
+        panels.addData("tof (s)", turret.tofNow);
+        panels.addData("flywheel rpm", shooter.rpm);
+        panels.addData("target rpm", Shooter.TARGET_RPM);
+        telemetry.addData("SOTM", "%s  virtual d %.1f  real d %.1f  tof %.2f  lead %.1f in",
+                turret.SOTM ? "on" : "off", turret.d, turret.dReal, turret.tofNow,
+                Math.hypot(turret.virX - turret.targetx, turret.virY - turret.targety));
+        telemetry.addData("shot", "%s  rpm %.0f  hood %.3f",
+                Shooter.AUTO_SHOT ? "AUTO (table)" : "manual", Shooter.TARGET_RPM, Shooter.HOOD_POS);
         panels.update();
         telemetry.update();
     }

@@ -1,8 +1,10 @@
 //stolen from brogan m pratt vid
 
 package org.firstinspires.ftc.teamcode.subSystems;
+import com.bylazar.configurables.annotations.Configurable;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
+import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
@@ -12,7 +14,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
 import robotcore.Subsystem;
 import java.util.Locale;
 import com.acmerobotics.dashboard.config.Config;
-@Config //so we can tune using the FTC dashboard
+@Configurable //so we can tune using the FTC dashboard
 public class fieldCentricMecanum extends Subsystem{
     //private Telemetry telemetry;
     public GoBildaPinpointDriver odo; // Declare   OpMode member for the Odometry Computer
@@ -23,7 +25,8 @@ public class fieldCentricMecanum extends Subsystem{
     // Heading Lock Variables
     private double headingSetpoint = 0.0;
     private boolean isLocking = false;
-    public static double kP = 0.9; //tune to adjust correction strength for anti-drifting.Tuned 8/16/26 by Zara
+    public static double STRAFE_GAIN = 1.2; // >1 boosts sideways to match forward (try 1.1-1.2 after Mecanum Wheel Test)
+    public static double kP = 0; //tune to adjust correction strength for anti-drifting.Tuned 8/16/26 by Zara
 
     @Override
     public void init(OpMode opMode) {
@@ -42,10 +45,16 @@ public class fieldCentricMecanum extends Subsystem{
         odo.resetPosAndIMU();
 
         //set directions (stole from DriveTrainTest hopefully works) -- needed to reverse them -- zld
-        frontLeftDrive.setDirection(DcMotor.Direction.REVERSE);
-        backLeftDrive.setDirection(DcMotor.Direction.REVERSE);
-        frontRightDrive.setDirection(DcMotor.Direction.FORWARD);
-        backRightDrive.setDirection(DcMotor.Direction.FORWARD);
+        frontLeftDrive.setDirection(DcMotor.Direction.FORWARD);
+        backLeftDrive.setDirection(DcMotor.Direction.FORWARD);
+        frontRightDrive.setDirection(DcMotor.Direction.REVERSE);
+        backRightDrive.setDirection(DcMotor.Direction.REVERSE);
+
+        frontLeftDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        backLeftDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        frontRightDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+        backRightDrive.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.BRAKE);
+
 
         frontLeftDrive.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
         backLeftDrive.setMode(DcMotor.RunMode.RUN_WITHOUT_ENCODER);
@@ -56,6 +65,7 @@ public class fieldCentricMecanum extends Subsystem{
     public void drive(double axial, double lateral, double yaw) {
         //odo.update(); moved to fieldCentric() to prevent double updating
 
+        lateral *= STRAFE_GAIN;
         double frontLeftPower = axial + lateral + yaw;
         double frontRightPower = axial - lateral - yaw;
         double backLeftPower = axial - lateral + yaw;

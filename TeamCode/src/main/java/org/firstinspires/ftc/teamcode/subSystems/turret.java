@@ -25,10 +25,33 @@ public class turret extends Subsystem {
 //    public static double kP = 3.5, kD=0.08;   // kP is now (rad/s asked for) per (rad of error)
     public static double kP = 6.2, kD=0.065;   // kP is now (rad/s asked for) per (rad of error)
 
+    // ---- I term: removes the small leftover lag/offset that P + feedforward can't ----
+    // kI = (rad/s asked for) per (rad of error * second). Start at 0, raise slowly.
+    public static double kI = 0.0;
+    public static double I_ZONE_DEG = 8;      // only integrate when this close (big moves = P's job)
+    public static double I_MAX = 1.0;         // max rad/s the I term may add (anti-windup clamp)
+    public static boolean I_RESET_ON_CROSS = true; // dump the I term when error changes sign (less overshoot)
+    public double iSum = 0;                   // integral of error (rad*s)
+    public double iTerm = 0;                  // kI * iSum, rad/s (for telemetry)
+    private double lastDt = 0, lastPError = 0;
+
+    // ---- shoot on the move ----
+    // Turret pivot relative to the robot center Pinpoint tracks (robot frame: +x forward, +y left).
+    // Same numbers as AprilTag.TURRET_DX/DY.
+    public static double TURRET_DX = -0.835, TURRET_DY = 0;
+    public static boolean SOTM = true;        // false = aim straight at the real goal (no lead)
+    public static double LATENCY_S = 0.10;    // aim where the robot WILL be when the ball leaves
+    public static double TOF_SCALE = 1.0;     // >1 = lead more, <1 = lead less (tune Thursday)
+    public static double VG_MAX_SHIFT = 60;   // in: virtual goal never moves further than this
+    public static int VG_ITERS = 3;
+    public boolean sotmEnabled = true;        // per-OpMode switch (PD tuner turns it off; SOTM is the master)
+    public double sx, sy, svx, svy;          // turret pivot position + velocity (field, predicted)
+    public double dReal, tofNow;              // distance to REAL goal, time of flight used
+
     public double wCmd;                // total speed asked for = feedforward + kP * error
     public double lastPower;           // power actually sent to the servos (for telemetry)
     // ---- wire safety ----
-    public static double SAFETY_DEG = 170;    // never push further out past this
+    public static double SAFETY_DEG = 200;    // never push further out past this
     public static double STALL_POWER = 0.3;   // "trying hard" threshold
     public static double STALL_S = 0.5;       // trying hard but not moving this long -> FAULT
     public boolean faulted = false;           // latched: turret stays off until the OpMode restarts
@@ -100,6 +123,7 @@ public class turret extends Subsystem {
         if (dt > 0) {
             velocity = (ticks - lastTicks) / TICKS_PER_TURRET_RAD / dt;
         }
+        lastDt = Math.min(dt, 0.1);   // cap: a long pause (init, breakpoint) shouldn't dump a big I step
         lastTicks = ticks;
         lastNanos = now;
     }
@@ -109,16 +133,34 @@ public class turret extends Subsystem {
         return rawTicks() / TICKS_PER_TURRET_RAD;  // rad, relative to where it was zeroed
     } // turrent angle from encoder
 
+    public void  targetUpdate(String target) {
+        if (target == "ba") {
+            targetx = 12.75;
+            targety = -18.5805750382;
+        }
+        if (target == "bs") {
+            targetx = 12.75;
+            targety = 18.5805750382;
+        }
+        if (target == "ra") {
+            targetx = -12.75;
+            targety = -18.5805750382;
+        }
+        if (target == "rs") {
+            targetx = 12.75;
+            targety = 18.5805750382;
+        }
+    }
     public void track() {
-        double rx = targetx - x;
-        double ry = targety - y;
-        d = Math.sqrt((Math.pow(rx, 2)) + Math.pow(ry, 2));
+        virGoal();                       // sets sx, sy, svx, svy, virX, virY, tofNow
+        double h = (SOTM && sotmEnabled) ? heading + wbot * LATENCY_S : heading;
+        double rx = virX - sx;
+        double ry = virY - sy;
+        d = Math.sqrt((Math.pow(rx, 2)) + Math.pow(ry, 2));   // distance to the (virtual) goal -> shot table
         double dSafe = Math.max(d, 10);  // only for the division
-        vtan = (rx * vy - ry * vx) / dSafe;
+        vtan = (rx * svy - ry * svx) / dSafe;
         wturret = -(wbot + (vtan / dSafe)); //output = input
-        theta = AngleUnit.normalizeRadians(atan2(ry, rx) - heading); //normalize radinas angles into [-pi, pi]
-
-
+        theta = AngleUnit.normalizeRadians(atan2(ry, rx) - h); //normalize radinas angles into [-pi, pi]
     }
 
     public double chooseTarget(double theta, double current) {
@@ -169,8 +211,24 @@ public class turret extends Subsystem {
         double ff = wturret;
         if (!reachable) ff = 0;                          // parked at a limit: no feedforward
 
-        // P becomes part of the speed we ask for, so velToPower's kS helps it beat friction
-        wCmd = ff + kP * pError;                         // rad/s
+        // ---- I term (with anti-windup) ----
+        boolean atLimit = (current >= MAX_ANGLE && pError > 0) || (current <= MIN_ANGLE && pError < 0);
+        boolean crossed = Math.signum(pError) != Math.signum(lastPError);
+        if (kI == 0 || faulted || !reachable || atLimit) {
+            iSum = 0;                                            // nothing useful to integrate
+        } else if (I_RESET_ON_CROSS && crossed) {
+            iSum = 0;                                            // passed the target: stop pushing
+        } else if (Math.abs(pError) < Math.toRadians(I_ZONE_DEG)) {
+            iSum += pError * lastDt;                             // only near the target
+            double sumMax = I_MAX / kI;                          // so kI*iSum stays within +/-I_MAX
+            iSum = Math.max(-sumMax, Math.min(sumMax, iSum));
+        }
+        // outside the zone: hold iSum (don't grow it, don't throw it away)
+        iTerm = kI * iSum;
+        lastPError = pError;
+
+        // P (and I) become part of the speed we ask for, so velToPower's kS helps beat friction
+        wCmd = ff + kP * pError + iTerm;                 // rad/s
         if (current >= MAX_ANGLE && wCmd > 0) wCmd = 0;  // don't push past the top stop
         if (current <= MIN_ANGLE && wCmd < 0) wCmd = 0;  // ...or the bottom one
 
@@ -212,14 +270,40 @@ public class turret extends Subsystem {
         setPower(finalPower);
     }
 
-    double tof(double d) {
-        return 0.5;
-    }
-
+    /**
+     * Virtual goal: the ball keeps the turret's velocity, so aim at goal - v * TOF.
+     * TOF depends on distance and distance depends on the aim point, so iterate a few times.
+     */
     public void virGoal() {
+        double cosH = Math.cos(heading), sinH = Math.sin(heading);
+        double ox = TURRET_DX * cosH - TURRET_DY * sinH;   // pivot offset, field frame
+        double oy = TURRET_DX * sinH + TURRET_DY * cosH;
+        // pivot velocity = robot velocity + spin * offset (omega x r)
+        svx = vx - wbot * oy;
+        svy = vy + wbot * ox;
+        sx = x + ox;
+        sy = y + oy;
+        dReal = Math.hypot(targetx - sx, targety - sy);
+
         virX = targetx;
         virY = targety;
+        tofNow = 0;
+        if (!SOTM || !sotmEnabled) return;
 
+        sx += svx * LATENCY_S;             // where the pivot will be when the ball actually leaves
+        sy += svy * LATENCY_S;
+        for (int i = 0; i < VG_ITERS; i++) {
+            double dist = Math.hypot(virX - sx, virY - sy);
+            tofNow = ShotTable.tof(dist) * TOF_SCALE;
+            double shiftX = -svx * tofNow, shiftY = -svy * tofNow;
+            double shift = Math.hypot(shiftX, shiftY);
+            if (shift > VG_MAX_SHIFT) {    // bad velocity reading: don't send the turret wild
+                shiftX *= VG_MAX_SHIFT / shift;
+                shiftY *= VG_MAX_SHIFT / shift;
+            }
+            virX = targetx + shiftX;
+            virY = targety + shiftY;
+        }
     }
 
 }

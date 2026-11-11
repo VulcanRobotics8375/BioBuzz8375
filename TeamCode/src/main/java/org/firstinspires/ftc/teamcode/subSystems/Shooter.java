@@ -21,7 +21,7 @@ import robotcore.Subsystem;
  *   Y            flywheel on/off
  *   X            intake on/off        (hold right trigger = reverse intake)
  *   A            transfer on/off      (when on and not shooting: low HOLD power against the gate)
- *   left bumper  HOLD to shoot: gate opens + transfer feeds, only once the flywheel is READY
+ *   left bumper  HOLD to shoot: gate opens + transfer feeds everything (flywheel must be on)
  *
  * Flywheel = bang-bang + feedforward/P hybrid:
  *   far below target (> BANG_ENTER_RPM low)  -> BANG_POWER (full) to get up to speed fast
@@ -37,34 +37,40 @@ public class Shooter extends Subsystem {
 
     // ---------------- flywheel ----------------
     public static boolean FLYWHEEL_REVERSE = true;   // flip if "rpm" reads negative while shooting (applied at init)
-    public static double TARGET_RPM = 3000;
+    public static double TARGET_RPM = 2325;
     public static double TICKS_PER_REV = 28;         // motor encoder ticks per rev
     // feedforward, fit with Flywheel Tuner: power needed at 12 V = kS + kV * (ticks/s)
-    public static double kS_FLY = 0.0;
-    public static double kV_FLY = 12.0 / 32767;      // placeholder (MotorOuttake's value) until you fit it
-    public static double kP_FLY = 0.002;             // power per (tick/s) of speed error
+    public static double kS_FLY = 0.1288;
+    public static double kV_FLY = 0.0004616;      // placeholder (MotorOuttake's value) until you fit it
+    public static double kP_FLY = 0.03;             // power per (tick/s) of speed error
     // bang-bang
     public static double BANG_POWER = 1.0;
     public static double BANG_ENTER_RPM = 300;       // go full power when this far BELOW target
     public static double BANG_EXIT_RPM = 100;        // hand back to FF+P when within this much below target
+    // while LB is held (balls going through), recover HARDER: full power as soon as we're a little slow
+    public static double FEED_BANG_ENTER_RPM = 30;   // full power when this far below target WHILE FEEDING
+    public static double FEED_BANG_EXIT_RPM = 5;     // back to FF+P when within this much
     public static double READY_RPM_TOL = 75;         // "ready to shoot" band
     public static double VEL_FILTER = 0.5;           // 1 = raw velocity, smaller = smoother but laggier
     public static double VOLTAGE_PERIOD_S = 0.25;    // how often to read battery voltage
 
     // ---------------- hood ----------------
-    public static double HOOD_POS = 0.0;             // later: set from the shot table with setHood()
+    public static double HOOD_POS = 0.06;             // later: set from the shot table with setHood()
 
     // ---------------- intake ----------------
-    public static double INTAKE_POWER = -0.8;
+    public static double INTAKE_POWER = -0.6;
     public static double INTAKE_REVERSE_POWER = 0.4;
 
     // ---------------- transfer + gate ----------------
-    public static double TRANSFER_FEED = -0.6;       // while shooting
-    public static double TRANSFER_HOLD = -0.25;      // pushing balls against the closed gate: LOWER = less current
+    public static double TRANSFER_FEED = -1.0;       // while shooting
+    public static double TRANSFER_HOLD = -0.675;      // pushing balls against the closed gate: LOWER = less current
     public static double GATE_CLOSED = 0.4;          // swap these two if the gate works backwards
     public static double GATE_OPEN = 0.65;
-    public static boolean REQUIRE_READY = true;      // only feed when the flywheel is up to speed
+    // Auto shot: MainOpMode sets RPM + hood from ShotTable every loop (using turret.d).
+    // Leave false until ShotTable has REAL numbers in it.
+    public static boolean AUTO_SHOT = false;
 
+    public static boolean COMP_INTAKE_TRANSFER = true; // scale intake/transfer power by 12 V / battery so they don't slow when it sags
     public static boolean SHOW_CURRENTS = true;      // each current read costs loop time; turn off for matches
 
     // ---------------- hardware ----------------
@@ -76,6 +82,7 @@ public class Shooter extends Subsystem {
     public boolean flywheelOn = false, intakeOn = false, transferOn = false;
     public boolean ready = false, feeding = false, bangMode = false;
     public double rpm = 0, tps = 0, flyPower = 0, voltage = 12;
+    public double burstMinRpm = 0, lastBurstMinRpm = 0;   // lowest rpm during the current / last LB burst
     private final ElapsedTime voltageTimer = new ElapsedTime();
 
     @Override
@@ -101,6 +108,13 @@ public class Shooter extends Subsystem {
     }
 
     public void setTargetRPM(double targetRpm) { TARGET_RPM = targetRpm; }
+
+    /** Distance (in, from turret.d) -> RPM + hood from the shot table. Only if AUTO_SHOT. */
+    public void setShot(double distance) {
+        if (!AUTO_SHOT) return;
+        TARGET_RPM = ShotTable.rpm(distance);
+        HOOD_POS = ShotTable.hood(distance, TARGET_RPM - rpm);   // + optional slow-flywheel hood fix
+    }
     public void setHood(double pos) { HOOD_POS = pos; }
     public double readBatteryVoltage() { return battery.getVoltage(); }
 
@@ -112,22 +126,34 @@ public class Shooter extends Subsystem {
         if (gamepad2.aWasPressed()) transferOn = !transferOn;
         boolean shootHeld = gamepad2.left_bumper;
 
-        updateFlywheel();
+        boolean wasFeeding = feeding;
+        feeding = shootHeld && flywheelOn;   // hold LB = everything fires, no waiting on READY
+        if (feeding && !wasFeeding) burstMinRpm = rpm;          // burst started
+        if (!feeding && wasFeeding) lastBurstMinRpm = burstMinRpm; // burst ended: remember the dip
+
+        updateFlywheel();   // uses `feeding` for the harder recovery
+        if (feeding) burstMinRpm = Math.min(burstMinRpm, rpm);
         hoodServo.setPosition(HOOD_POS);
 
         // ---- gate + transfer ----
-        feeding = shootHeld && flywheelOn && (ready || !REQUIRE_READY);
         gateServo.setPosition(feeding ? GATE_OPEN : GATE_CLOSED);
-        if (feeding) transferMotor.setPower(TRANSFER_FEED);
-        else if (transferOn) transferMotor.setPower(TRANSFER_HOLD);
+        if (feeding) transferMotor.setPower(vc(TRANSFER_FEED));
+        else if (transferOn) transferMotor.setPower(vc(TRANSFER_HOLD));
         else transferMotor.setPower(0);
 
         // ---- intake ----
         if (!intakeOn) intakeMotor.setPower(0);
-        else if (gamepad2.right_trigger_pressed) intakeMotor.setPower(INTAKE_REVERSE_POWER);
-        else intakeMotor.setPower(INTAKE_POWER);
+        else if (gamepad2.right_trigger_pressed) intakeMotor.setPower(vc(INTAKE_REVERSE_POWER));
+        else intakeMotor.setPower(vc(INTAKE_POWER));
 
         addTelemetry();
+    }
+
+    /** Voltage-compensated power: same speed at 10.5 V as at 12 V (up to the +/-1 limit). */
+    private double vc(double power) {
+        if (!COMP_INTAKE_TRANSFER) return power;
+        double p = power * 12.0 / Math.max(voltage, 8.0);
+        return Math.max(-1, Math.min(1, p));
     }
 
     /** Flywheel controller only (no gamepad). The Flywheel Tuner calls this directly. */
@@ -152,8 +178,10 @@ public class Shooter extends Subsystem {
         double errRpm = TARGET_RPM - rpm;   // + = too slow, - = too fast
 
         // hysteresis: in between EXIT and ENTER, keep whatever mode we were already in
-        if (errRpm > BANG_ENTER_RPM) bangMode = true;
-        else if (errRpm < BANG_EXIT_RPM) bangMode = false;
+        double enter = feeding ? FEED_BANG_ENTER_RPM : BANG_ENTER_RPM;
+        double exit  = feeding ? FEED_BANG_EXIT_RPM  : BANG_EXIT_RPM;
+        if (errRpm > enter) bangMode = true;
+        else if (errRpm < exit) bangMode = false;
 
         double cmd;
         if (bangMode) {
@@ -173,6 +201,8 @@ public class Shooter extends Subsystem {
         telemetry.addData("flywheel", "%s  target %.0f  rpm %.0f  power %.2f  %s",
                 flywheelOn ? "ON" : "off", TARGET_RPM, rpm, flyPower, bangMode ? "BANG" : "FF+P");
         telemetry.addData("READY", ready);
+        telemetry.addData("burst dip", "now %.0f  last burst %.0f rpm below target",
+                feeding ? TARGET_RPM - burstMinRpm : 0, TARGET_RPM - lastBurstMinRpm);
         telemetry.addData("feeding", feeding);
         telemetry.addData("intake / transfer", "%s / %s",
                 intakeOn ? "on" : "off", feeding ? "FEED" : (transferOn ? "HOLD" : "off"));
