@@ -18,8 +18,8 @@ import robotcore.Subsystem;
 
 @Configurable
 public class turret extends Subsystem {
-    public static final double MIN_ANGLE = Math.toRadians(-200);
-    public static final double MAX_ANGLE = Math.toRadians(200);
+    public static final double MIN_ANGLE = Math.toRadians(-120);
+    public static final double MAX_ANGLE = Math.toRadians(180);
     public boolean reachable = false;
     public double wturret, theta, wbot, vtan, d, targety=-18.5805750382, targetx=12.75, x, y, vx, vy, heading, pError, vError, virX, virY;
 //    public static double kP = 3.5, kD=0.08;   // kP is now (rad/s asked for) per (rad of error)
@@ -62,8 +62,8 @@ public class turret extends Subsystem {
     // Re-run Turret Characterize to confirm.
 //    public static double kS_POS = 0.18, kV_POS = 0.105;
 //    public static double kS_NEG = 0.27, kV_NEG = 0.09;
-    public static double kS_POS = 0.215, kV_POS = 0.06;
-    public static double kS_NEG = 0.153, kV_NEG = 0.1;
+    public static double kS_POS = 0.172301, kV_POS = 0.0916358;
+    public static double kS_NEG = 0.180597, kV_NEG = 0.0942956;
     //inputs: x, y, heading, vx, vy, wbot,
     //set: targetx, targety, kP,kD, sync servos
     //outputs: d, vtan, wturret, theta, pError, vError,virtualX, virtualY
@@ -87,7 +87,7 @@ public class turret extends Subsystem {
     @Override
     public void init(OpMode opMode) {
         instantiateSubsystem(opMode);
-        encoder = hardwareMap.get(DcMotorEx.class, "leftFront");
+        encoder = hardwareMap.get(DcMotorEx.class, "tEnc");
         turretServo1 = hardwareMap.get(CRServoImplEx.class, "tServo1");
         turretServo2 = hardwareMap.get(CRServoImplEx.class, "tServo2");
         // Positive power must turn the turret CCW (angle goes UP). Both flipped together
@@ -107,7 +107,7 @@ public class turret extends Subsystem {
      *   which would otherwise flip this reading in MainOpMode but not in the test OpModes.) */
     private int rawTicks() {
         int ticks = encoder.getCurrentPosition();
-        return encoder.getDirection() == DcMotorSimple.Direction.REVERSE ? -ticks : ticks;
+        return encoder.getDirection() == DcMotorSimple.Direction.FORWARD ? -ticks : ticks;
     }
 
     public void setPower(double power) {
