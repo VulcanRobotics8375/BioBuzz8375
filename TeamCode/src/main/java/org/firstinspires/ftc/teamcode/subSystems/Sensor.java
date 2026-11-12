@@ -36,7 +36,7 @@ public void breakBeam() {
 
         if (finalTime >= 500 && !objectDetected) {
             objectDetected = true;
-            telemetry.addData("Ramp is full", objectDetected); // idk what other data to put here (ig that it will be smth in another class
+            telemetry.addData("Ramp is full", beamBreak.getState()); // idk what other data to put here (ig that it will be smth in another class
             intakeMotor.setPower(0.0);
 
         }
