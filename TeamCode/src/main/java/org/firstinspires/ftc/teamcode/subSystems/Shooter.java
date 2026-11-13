@@ -6,6 +6,7 @@ import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorEx;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.Servo;
+import com.qualcomm.robotcore.hardware.ServoImplEx;
 import com.qualcomm.robotcore.hardware.VoltageSensor;
 import com.qualcomm.robotcore.util.ElapsedTime;
 
@@ -71,7 +72,8 @@ public class Shooter extends Subsystem {
     public static boolean AUTO_SHOT = false;
 
     public static boolean COMP_INTAKE_TRANSFER = true; // scale intake/transfer power by 12 V / battery so they don't slow when it sags
-    public static boolean SHOW_CURRENTS = true;      // each current read costs loop time; turn off for matches
+    public static boolean SERVOS_ON = true;         // TEST SWITCH: false = hood + gate servos go limp (PWM off)
+    public static boolean SHOW_CURRENTS = false;     // each current read costs loop time; turn off for matches
 
     // ---------------- hardware ----------------
     public DcMotorEx flywheel, intakeMotor, transferMotor;
@@ -95,7 +97,7 @@ public class Shooter extends Subsystem {
         flywheel.setZeroPowerBehavior(DcMotor.ZeroPowerBehavior.FLOAT); // coast, no braking spike
 
         intakeMotor = hardwareMap.get(DcMotorEx.class, "intake_motor");
-        intakeMotor.setDirection(DcMotorSimple.Direction.REVERSE);
+        intakeMotor.setDirection(DcMotorSimple.Direction.FORWARD);
         transferMotor = hardwareMap.get(DcMotorEx.class, "transfer_motor");
         transferMotor.setDirection(DcMotorSimple.Direction.REVERSE);
 
@@ -133,10 +135,16 @@ public class Shooter extends Subsystem {
 
         updateFlywheel();   // uses `feeding` for the harder recovery
         if (feeding) burstMinRpm = Math.min(burstMinRpm, rpm);
-        hoodServo.setPosition(HOOD_POS);
+        // ---- hood + gate servos (SERVOS_ON = false turns them off completely, for power testing) ----
+        if (SERVOS_ON) {
+            hoodServo.setPosition(HOOD_POS);
+            gateServo.setPosition(feeding ? GATE_OPEN : GATE_CLOSED);
+        } else {
+            if (hoodServo instanceof ServoImplEx) ((ServoImplEx) hoodServo).setPwmDisable();
+            if (gateServo instanceof ServoImplEx) ((ServoImplEx) gateServo).setPwmDisable();
+        }
 
-        // ---- gate + transfer ----
-        gateServo.setPosition(feeding ? GATE_OPEN : GATE_CLOSED);
+        // ---- transfer ----
         if (feeding) transferMotor.setPower(vc(TRANSFER_FEED));
         else if (transferOn) transferMotor.setPower(vc(TRANSFER_HOLD));
         else transferMotor.setPower(0);

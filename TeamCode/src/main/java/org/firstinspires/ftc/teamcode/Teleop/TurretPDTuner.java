@@ -38,6 +38,10 @@ public class TurretPDTuner extends OpMode {
     public static double KP_STEP = 0.5;    // D-pad up/down changes kP by this
     public static double KD_STEP = 0.005;  // D-pad right/left changes kD by this
     public static double KI_STEP = 0.5;    // right/left bumper changes kI by this
+    // true = aim at where the robot's heading WILL be in turret.LATENCY_S (what MainOpMode does).
+    // Use in SPIN to tune LATENCY_S: raise it until the turret slope sits on the target slope.
+    // (Robot isn't translating here, so this only turns on the heading prediction.)
+    public static boolean LATENCY_COMP = false;
 
     @Override
     public void init() {
@@ -84,6 +88,7 @@ public class TurretPDTuner extends OpMode {
                 break;
         }
 
+        t.sotmEnabled = LATENCY_COMP;
         t.x = 0; t.y = 0; t.vx = 0; t.vy = 0;
         t.heading = heading;
         t.wbot = wbot;
@@ -95,7 +100,10 @@ public class TurretPDTuner extends OpMode {
         panels.addData("FAULT", t.faulted ? "YES: " + t.faultReason + " (restart OpMode)" : "no");
         panels.addData("mode", mode.toString());
         panels.addData("power", t.lastPower);
-        panels.addData("target (deg)", Math.toDegrees(t.theta));
+        panels.addData("target (deg)", Math.toDegrees(t.theta));   // = aimed-ahead target when LATENCY_COMP is on
+        double trueTarget = org.firstinspires.ftc.robotcore.external.navigation.AngleUnit.normalizeRadians(targetAngle - heading);
+        panels.addData("true target (deg)", Math.toDegrees(trueTarget));
+        panels.addData("true error (deg)", Math.toDegrees(trueTarget - t.turretAngle()));
         panels.addData("turret (deg)", Math.toDegrees(t.turretAngle()));
         panels.addData("error (deg)", Math.toDegrees(t.pError));
         panels.addData("ff vel (rad/s)", t.wturret);
@@ -105,6 +113,7 @@ public class TurretPDTuner extends OpMode {
         panels.addData("kD  (dpad right/left)", turret.kD);
         panels.addData("kI  (bumpers R+/L-)", turret.kI);
         panels.addData("I term (rad/s)", t.iTerm);
+        panels.addData("latency comp", LATENCY_COMP ? "ON  LATENCY_S=" + turret.LATENCY_S : "off");
         panels.update(telemetry);
     }
 

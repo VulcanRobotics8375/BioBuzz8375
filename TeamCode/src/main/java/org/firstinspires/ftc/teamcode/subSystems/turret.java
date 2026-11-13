@@ -18,12 +18,17 @@ import robotcore.Subsystem;
 
 @Configurable
 public class turret extends Subsystem {
-    public static final double MIN_ANGLE = Math.toRadians(-120);
-    public static final double MAX_ANGLE = Math.toRadians(180);
+    // Turret travel limits, DEGREES from straight forward (CCW = +). Live-editable in Panels.
+    // Set ~5-10 deg INSIDE the physical stops / where the wires get tight.
+    public static double MIN_ANGLE_DEG = -120;
+    public static double MAX_ANGLE_DEG = 180;
+    private static double minA() { return Math.toRadians(MIN_ANGLE_DEG); }
+    private static double maxA() { return Math.toRadians(MAX_ANGLE_DEG); }
     public boolean reachable = false;
     public double wturret, theta, wbot, vtan, d, targety=-18.5805750382, targetx=12.75, x, y, vx, vy, heading, pError, vError, virX, virY;
 //    public static double kP = 3.5, kD=0.08;   // kP is now (rad/s asked for) per (rad of error)
-    public static double kP = 6.2, kD=0.065;   // kP is now (rad/s asked for) per (rad of error)
+    public static double kP = 4, kD=0.0575;   // kP is now (rad/s asked for) per (rad of error)
+    //P:4, I:14, D:0.05
 
     // ---- I term: removes the small leftover lag/offset that P + feedforward can't ----
     // kI = (rad/s asked for) per (rad of error * second). Start at 0, raise slowly.
@@ -52,18 +57,17 @@ public class turret extends Subsystem {
     public double lastPower;           // power actually sent to the servos (for telemetry)
     // ---- wire safety ----
     public static double SAFETY_DEG = 200;    // never push further out past this
-    public static double STALL_POWER = 0.3;   // "trying hard" threshold
-    public static double STALL_S = 0.5;       // trying hard but not moving this long -> FAULT
+    public static double STALL_POWER = 0.3;   // "trying hard" threshold (used by the wrong-way check)
     public boolean faulted = false;           // latched: turret stays off until the OpMode restarts
     public String faultReason = "";
-    private long stallStartNanos = -1, wrongWayStartNanos = -1;
+    private long wrongWayStartNanos = -1;
     // Feedforward per direction (fit: power = kV * |vel| + kS). POS = turret turning CCW (angle up).
     // Swapped after the servo flip so each value stays with the same PHYSICAL direction.
     // Re-run Turret Characterize to confirm.
 //    public static double kS_POS = 0.18, kV_POS = 0.105;
 //    public static double kS_NEG = 0.27, kV_NEG = 0.09;
-    public static double kS_POS = 0.172301, kV_POS = 0.0916358;
-    public static double kS_NEG = 0.180597, kV_NEG = 0.0942956;
+    public static double kS_POS = 0.14, kV_POS = 0.08;//0.02, 0.125
+    public static double kS_NEG = 0.16, kV_NEG = 0.09;//0.025, 0.145
     //inputs: x, y, heading, vx, vy, wbot,
     //set: targetx, targety, kP,kD, sync servos
     //outputs: d, vtan, wturret, theta, pError, vError,virtualX, virtualY
@@ -147,7 +151,7 @@ public class turret extends Subsystem {
             targety = -18.5805750382;
         }
         if (target == "rs") {
-            targetx = 12.75;
+            targetx = -12.75;   // was +12.75 = the BLUE goal (copy of "bs"); red = -x like "ra"
             targety = 18.5805750382;
         }
     }
@@ -167,7 +171,7 @@ public class turret extends Subsystem {
         double[] candidates = {theta, theta + 2 * PI, theta - 2 * PI};
         double best = Double.NaN;                          // "none yet"
         for (double c : candidates) {
-            if (c < MIN_ANGLE || c > MAX_ANGLE) {
+            if (c < minA() || c > maxA()) {
                 continue;
             }// outside limits: skip
             if (Double.isNaN(best) || Math.abs(c - current) < Math.abs(best - current)) {
@@ -176,7 +180,7 @@ public class turret extends Subsystem {
         }
         reachable = !Double.isNaN(best);   // found at least one valid candidate?
         if (Double.isNaN(best)) {                          // target is behind the stops
-            best = Math.max(MIN_ANGLE, Math.min(MAX_ANGLE, theta));
+            best = Math.max(minA(), Math.min(maxA(), theta));
         }
         return best;
     }
@@ -212,7 +216,7 @@ public class turret extends Subsystem {
         if (!reachable) ff = 0;                          // parked at a limit: no feedforward
 
         // ---- I term (with anti-windup) ----
-        boolean atLimit = (current >= MAX_ANGLE && pError > 0) || (current <= MIN_ANGLE && pError < 0);
+        boolean atLimit = (current >= maxA() && pError > 0) || (current <= minA() && pError < 0);
         boolean crossed = Math.signum(pError) != Math.signum(lastPError);
         if (kI == 0 || faulted || !reachable || atLimit) {
             iSum = 0;                                            // nothing useful to integrate
@@ -229,8 +233,8 @@ public class turret extends Subsystem {
 
         // P (and I) become part of the speed we ask for, so velToPower's kS helps beat friction
         wCmd = ff + kP * pError + iTerm;                 // rad/s
-        if (current >= MAX_ANGLE && wCmd > 0) wCmd = 0;  // don't push past the top stop
-        if (current <= MIN_ANGLE && wCmd < 0) wCmd = 0;  // ...or the bottom one
+        if (current >= maxA() && wCmd > 0) wCmd = 0;  // don't push past the top stop
+        if (current <= minA() && wCmd < 0) wCmd = 0;  // ...or the bottom one
 
         vError = wCmd - tVelocity();                     // D: damp the difference from the asked-for speed
         double finalPower;
@@ -242,17 +246,7 @@ public class turret extends Subsystem {
         if (Math.abs(current) > Math.toRadians(SAFETY_DEG) && Math.signum(finalPower) == Math.signum(current)) {
             finalPower = 0;
         }
-        // 2. encoder unplugged / wrong sign / jammed: pushing hard but not moving -> latch off
-        if (Math.abs(finalPower) > STALL_POWER && Math.abs(tVelocity()) < 0.05) {
-            if (stallStartNanos < 0) stallStartNanos = System.nanoTime();
-            if ((System.nanoTime() - stallStartNanos) / 1e9 > STALL_S) {
-                faulted = true;
-                faultReason = String.format("stalled at %.0f deg, power %.2f", Math.toDegrees(current), finalPower);
-            }
-        } else {
-            stallStartNanos = -1;
-        }
-        // 3. wrong sign: pushing one way but moving fast the OTHER way -> latch off
+        // 2. wrong sign: pushing one way but moving fast the OTHER way -> latch off
         if (Math.abs(finalPower) > STALL_POWER && Math.abs(tVelocity()) > 1.0
                 && Math.signum(tVelocity()) != Math.signum(finalPower)) {
             if (wrongWayStartNanos < 0) wrongWayStartNanos = System.nanoTime();
