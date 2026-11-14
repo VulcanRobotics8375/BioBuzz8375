@@ -41,18 +41,18 @@ public class Shooter extends Subsystem {
     public static double TARGET_RPM = 2325;
     public static double TICKS_PER_REV = 28;         // motor encoder ticks per rev
     // feedforward, fit with Flywheel Tuner: power needed at 12 V = kS + kV * (ticks/s)
-    public static double kS_FLY = 0.1288;
-    public static double kV_FLY = 0.0004616;      // placeholder (MotorOuttake's value) until you fit it
-    public static double kP_FLY = 0.03;             // power per (tick/s) of speed error
+    public static double kS_FLY = 0.028;
+    public static double kV_FLY = 0.0004719;      // placeholder (MotorOuttake's value) until you fit it
+    public static double kP_FLY = 0.0018;             // power per (tick/s) of speed error
     // bang-bang
     public static double BANG_POWER = 1.0;
-    public static double BANG_ENTER_RPM = 300;       // go full power when this far BELOW target
-    public static double BANG_EXIT_RPM = 100;        // hand back to FF+P when within this much below target
+    public static double BANG_ENTER_RPM = 210;       // go full power when this far BELOW target
+    public static double BANG_EXIT_RPM = 200;        // hand back to FF+P when within this much below target
     // while LB is held (balls going through), recover HARDER: full power as soon as we're a little slow
     public static double FEED_BANG_ENTER_RPM = 30;   // full power when this far below target WHILE FEEDING
     public static double FEED_BANG_EXIT_RPM = 5;     // back to FF+P when within this much
     public static double READY_RPM_TOL = 75;         // "ready to shoot" band
-    public static double VEL_FILTER = 0.5;           // 1 = raw velocity, smaller = smoother but laggier
+    public static double VEL_FILTER = 0.01;           // 1 = raw velocity, smaller = smoother but laggier
     public static double VOLTAGE_PERIOD_S = 0.25;    // how often to read battery voltage
 
     // ---------------- hood ----------------
@@ -69,7 +69,7 @@ public class Shooter extends Subsystem {
     public static double GATE_OPEN = 0.65;
     // Auto shot: MainOpMode sets RPM + hood from ShotTable every loop (using turret.d).
     // Leave false until ShotTable has REAL numbers in it.
-    public static boolean AUTO_SHOT = false;
+    public static boolean AUTO_SHOT = true;
 
     public static boolean COMP_INTAKE_TRANSFER = true; // scale intake/transfer power by 12 V / battery so they don't slow when it sags
     public static boolean SERVOS_ON = true;         // TEST SWITCH: false = hood + gate servos go limp (PWM off)
@@ -82,8 +82,10 @@ public class Shooter extends Subsystem {
 
     // ---------------- state ----------------
     public boolean flywheelOn = false, intakeOn = false, transferOn = false;
+    public boolean intakeBlocked = false;   // set by IntakeSensor: ball sitting at the intake -> stop it
     public boolean ready = false, feeding = false, bangMode = false;
     public double rpm = 0, tps = 0, flyPower = 0, voltage = 12;
+    public double hoodFix = 0;                            // hood change from the slow-flywheel fix
     public double burstMinRpm = 0, lastBurstMinRpm = 0;   // lowest rpm during the current / last LB burst
     private final ElapsedTime voltageTimer = new ElapsedTime();
 
@@ -103,6 +105,7 @@ public class Shooter extends Subsystem {
 
         gateServo = hardwareMap.get(Servo.class, "transfer_servo");
         hoodServo = hardwareMap.get(Servo.class, "hood_servo");
+        hoodServo.setDirection(Servo.Direction.REVERSE);
 
         battery = hardwareMap.voltageSensor.iterator().next();
         voltage = battery.getVoltage();
@@ -115,7 +118,8 @@ public class Shooter extends Subsystem {
     public void setShot(double distance) {
         if (!AUTO_SHOT) return;
         TARGET_RPM = ShotTable.rpm(distance);
-        HOOD_POS = ShotTable.hood(distance, TARGET_RPM - rpm);   // + optional slow-flywheel hood fix
+        HOOD_POS = ShotTable.hood(distance, TARGET_RPM - rpm);   // + slow-flywheel hood fix (HOOD_PER_RPM)
+        hoodFix = HOOD_POS - ShotTable.hood(distance);           // how much the fix moved the hood (telemetry)
     }
     public void setHood(double pos) { HOOD_POS = pos; }
     public double readBatteryVoltage() { return battery.getVoltage(); }
@@ -151,7 +155,8 @@ public class Shooter extends Subsystem {
 
         // ---- intake ----
         if (!intakeOn) intakeMotor.setPower(0);
-        else if (gamepad2.right_trigger_pressed) intakeMotor.setPower(vc(INTAKE_REVERSE_POWER));
+        else if (gamepad2.right_trigger_pressed) intakeMotor.setPower(vc(INTAKE_REVERSE_POWER));  // reverse always works
+        else if (intakeBlocked) intakeMotor.setPower(0);
         else intakeMotor.setPower(vc(INTAKE_POWER));
 
         addTelemetry();
@@ -209,11 +214,12 @@ public class Shooter extends Subsystem {
         telemetry.addData("flywheel", "%s  target %.0f  rpm %.0f  power %.2f  %s",
                 flywheelOn ? "ON" : "off", TARGET_RPM, rpm, flyPower, bangMode ? "BANG" : "FF+P");
         telemetry.addData("READY", ready);
+        telemetry.addData("hood fix", "%+.3f (rpm err %.0f)", hoodFix, TARGET_RPM - rpm);
         telemetry.addData("burst dip", "now %.0f  last burst %.0f rpm below target",
                 feeding ? TARGET_RPM - burstMinRpm : 0, TARGET_RPM - lastBurstMinRpm);
         telemetry.addData("feeding", feeding);
         telemetry.addData("intake / transfer", "%s / %s",
-                intakeOn ? "on" : "off", feeding ? "FEED" : (transferOn ? "HOLD" : "off"));
+                intakeOn ? (intakeBlocked ? "on (BLOCKED)" : "on") : "off", feeding ? "FEED" : (transferOn ? "HOLD" : "off"));
         telemetry.addData("battery V", "%.2f", voltage);
         if (SHOW_CURRENTS) {
             telemetry.addData("amps fly / intake / transfer", "%.1f / %.1f / %.1f",

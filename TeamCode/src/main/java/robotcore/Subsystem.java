@@ -28,6 +28,12 @@ public abstract class Subsystem {
 //    } //^^ some weird chat method to fix our abstract class issues
 //    public abstract void init();
 
+    /** Use these gamepads instead of the OpMode's (e.g. PanelsPads). Call AFTER init(). */
+    public void useGamepads(Gamepad g1, Gamepad g2) {
+        this.gamepad1 = g1;
+        this.gamepad2 = g2;
+    }
+
     public abstract void init(OpMode opMode);
 
     //public abstract void init(OpMode opMode);

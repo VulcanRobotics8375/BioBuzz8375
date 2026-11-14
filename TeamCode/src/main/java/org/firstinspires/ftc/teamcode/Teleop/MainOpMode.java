@@ -2,6 +2,7 @@ package org.firstinspires.ftc.teamcode.Teleop;
 
 import static org.firstinspires.ftc.robotcore.external.navigation.AngleUnit.normalizeRadians;
 
+import com.bylazar.configurables.annotations.Configurable;
 import com.qualcomm.hardware.lynx.LynxModule;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
@@ -11,6 +12,7 @@ import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit
 import org.firstinspires.ftc.teamcode.auton.GoBildaPinpointDriver;
 import org.firstinspires.ftc.teamcode.subSystems.AprilTag;
 import org.firstinspires.ftc.teamcode.subSystems.MotorOuttake;
+import org.firstinspires.ftc.teamcode.subSystems.IntakeSensor;
 import org.firstinspires.ftc.teamcode.subSystems.Shooter;
 import org.firstinspires.ftc.teamcode.subSystems.fieldCentricMecanum;
 import org.firstinspires.ftc.teamcode.subSystems.Intake;
@@ -22,6 +24,7 @@ import com.bylazar.field.PanelsField;
 import com.bylazar.field.FieldManager;
 
 
+@Configurable
 @TeleOp(name="MainOpMode")
     public class MainOpMode extends OpMode {
     TelemetryManager panels;
@@ -31,9 +34,12 @@ import com.bylazar.field.FieldManager;
     Intake Intake = new Intake();
     MotorOuttake Outtake = new MotorOuttake();
     Shooter shooter = new Shooter();
+    IntakeSensor intakeSensor = new IntakeSensor();
+    PanelsPads pads = new PanelsPads();   // real + Panels controllers merged
 
     //    localizer loc = new localizer(-63, -63, 0);
-    localizer loc = new localizer(-63, -63, Math.PI/2);
+    public static double startx=63, starty=63, starth=-Math.PI/2;
+    localizer loc = new localizer(startx, starty, starth);
 
     GoBildaPinpointDriver odo;
     turret turret = new turret();
@@ -61,26 +67,29 @@ import com.bylazar.field.FieldManager;
         loc.instantiateSubsystem(this);
         drive.init(this);
         shooter.init(this);
+        intakeSensor.init(this);
 //        Intake.init(this);
 //        Outtake.init(this);
         turret.init(this);
 //        apriltag.init(this);
         odo = drive.odo;
+        shooter.useGamepads(pads.g1, pads.g2);
     }
 
     @Override
     public void loop() {
         for (LynxModule hub : hardwareMap.getAll(LynxModule.class)) hub.clearBulkCache();
+        pads.update(this);
 
-        axial = gamepad1.left_stick_y;
-        lateral = -gamepad1.left_stick_x;
-        yaw = -gamepad1.right_stick_x;
+        axial = pads.g1.left_stick_y;
+        lateral = -pads.g1.left_stick_x;
+        yaw = -pads.g1.right_stick_x;
 
         drive.fieldCentric(axial, lateral, yaw);
 //        Intake.runIntake();
 //        Outtake.runOuttake();
 
-        if (gamepad2.rightBumperWasPressed()) {
+        if (pads.g2.rightBumperWasPressed()) {
             alliance = !alliance;
         }
 
@@ -126,11 +135,13 @@ import com.bylazar.field.FieldManager;
         turret.tUpdate();          // also computes the virtual goal + turret.d (virtual distance)
 
         // shooter AFTER the turret, so RPM/hood use this loop's (virtual) distance
+        intakeSensor.update(turret);                     // ball at intake? shootable spot? -> LEDs
+        shooter.intakeBlocked = intakeSensor.blocked;
         shooter.setShot(turret.d); // only does something when Shooter.AUTO_SHOT = true
         shooter.update();
 
 //        if (apriltag.localize(turret.turretAngle(), loc.getH())) {
-//            if (gamepad2.left_trigger_pressed) {
+//            if (pads.g2.left_trigger_pressed) {
 //                loc.update(apriltag.camX, apriltag.camY, apriltag.camH);
 //                camOn = true;
 //            } else {
@@ -180,6 +191,7 @@ import com.bylazar.field.FieldManager;
         telemetry.addData("turret at (deg)", "%.1f", Math.toDegrees(turret.turretAngle()));
         telemetry.addData("turret error (deg)", "%.1f", Math.toDegrees(turret.pError));
         telemetry.addData("reachable", turret.reachable);
+        telemetry.addData("aim", "off-axis %.0f deg  depth %.1f in", turret.offAxisDeg, turret.aimDepth);
         telemetry.addData("ff / cmd vel (rad/s)", "%.2f / %.2f", turret.wturret, turret.wCmd);
         telemetry.addData("actual vel (rad/s)", "%.2f", turret.tVelocity());
         telemetry.addData("turret power", "%.2f", turret.lastPower);
@@ -202,5 +214,10 @@ import com.bylazar.field.FieldManager;
                 Shooter.AUTO_SHOT ? "AUTO (table)" : "manual", Shooter.TARGET_RPM, Shooter.HOOD_POS);
         panels.update();
         telemetry.update();
+    }
+
+    @Override
+    public void stop() {
+        intakeSensor.stop();
     }
 }

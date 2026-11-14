@@ -11,20 +11,22 @@ package org.firstinspires.ftc.teamcode.subSystems;
  * through all rows (USE_FIT = true, needs >= 4 rows) which averages out per-row tuning noise.
  * Outside the measured range it CLAMPS to the end rows (never guesses beyond your data).
  */
+@com.bylazar.configurables.annotations.Configurable
 public class ShotTable {
     public static boolean USE_FIT = false;
 
     //                         distance (in)   hood        rpm      tof (s)
-    public static double[] D    = { 36,         54,         72,      90,      108 };
-    public static double[] HOOD = { 0.10,       0.15,       0.20,    0.25,    0.30 };
-    public static double[] RPM  = { 2400,       2650,       2900,    3150,    3400 };
-    public static double[] TOF  = { 0.40,       0.48,       0.56,    0.64,    0.72 };
+    // sorted short -> long (lookup needs this order)
+    public static double[] D    = { 25.95,      36.87,      45.25,   52.41 };
+    public static double[] HOOD = { 0.25,       0.15,       0.09,    0.07 };
+    public static double[] RPM  = { 2070,       2040,       2100,    2100 };
+    public static double[] TOF  = { 0.35,       0.40,       0.44,    0.47 };   // GUESSES - measure with slow-mo
 
     // Optional: fix the hood when the flywheel is slow (e.g. 4th ball of a burst). Hood units per
     // RPM of error (target - actual). 0 = off. Measure: at one distance, drop rpm 100, find the hood
     // that scores again -> HOOD_PER_RPM = (that hood - normal hood) / 100.
     public static double HOOD_PER_RPM = 0;
-    public static double HOOD_COMP_MAX_RPM = 250;   // ignore errors bigger than this (spin-up)
+    public static double HOOD_COMP_MAX_RPM = 450;   // ignore errors bigger than this (spin-up)
 
     public static double hood(double d) { return lookup(d, HOOD); }
     public static double rpm(double d)  { return lookup(d, RPM); }

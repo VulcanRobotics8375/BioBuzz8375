@@ -22,6 +22,21 @@ public class turret extends Subsystem {
     // Set ~5-10 deg INSIDE the physical stops / where the wires get tight.
     public static double MIN_ANGLE_DEG = -120;
     public static double MAX_ANGLE_DEG = 180;
+    // ---- smart aim point: aim DEEPER into the goal when shooting from off to the side ----
+    // Each goal's FACING = the direction its opening points OUT into the field (deg, field frame, CCW from +x).
+    // Calibrate: park straight in front of a goal -> "off-axis" telemetry should read ~0. Adjust until it does.
+    public static double FACING_BA_DEG = 0, FACING_BS_DEG = 0, FACING_RA_DEG = 0, FACING_RS_DEG = 0;
+    public static boolean SMART_AIM = true;
+    public static double AIM_DEPTH_MAX = 0;     // in: how far INTO the goal to aim at full off-axis angle (0 = off)
+    public static double AIM_FULL_DEG = 60;     // off-axis angle where the full depth is used (linear below it)
+    public double goalX = 12.75, goalY = -18.5805750382, goalFacing = 0;  // front-center of the chosen goal
+    // LOCK: hold the turret at lockAngleDeg instead of aiming (Shot Table Tuner). track() still runs, so
+    // d (distance) and aimTheta (where the goal is, relative to the robot) keep updating.
+    public boolean lockMode = false;
+    public double lockAngleDeg = 0;
+    public double aimTheta = 0;                 // rad: turret angle that WOULD point at the goal
+    public boolean goalSet = false;             // only true once targetUpdate() picked a goal (tuners set targetx directly)
+    public double offAxisDeg = 0, aimDepth = 0; // telemetry
     private static double minA() { return Math.toRadians(MIN_ANGLE_DEG); }
     private static double maxA() { return Math.toRadians(MAX_ANGLE_DEG); }
     public boolean reachable = false;
@@ -44,7 +59,7 @@ public class turret extends Subsystem {
     // Turret pivot relative to the robot center Pinpoint tracks (robot frame: +x forward, +y left).
     // Same numbers as AprilTag.TURRET_DX/DY.
     public static double TURRET_DX = -0.835, TURRET_DY = 0;
-    public static boolean SOTM = true;        // false = aim straight at the real goal (no lead)
+    public static boolean SOTM = false;        // false = aim straight at the real goal (no lead)
     public static double LATENCY_S = 0.10;    // aim where the robot WILL be when the ball leaves
     public static double TOF_SCALE = 1.0;     // >1 = lead more, <1 = lead less (tune Thursday)
     public static double VG_MAX_SHIFT = 60;   // in: virtual goal never moves further than this
@@ -138,24 +153,37 @@ public class turret extends Subsystem {
     } // turrent angle from encoder
 
     public void  targetUpdate(String target) {
-        if (target == "ba") {
-            targetx = 12.75;
-            targety = -18.5805750382;
-        }
-        if (target == "bs") {
-            targetx = 12.75;
-            targety = 18.5805750382;
-        }
-        if (target == "ra") {
-            targetx = -12.75;
-            targety = -18.5805750382;
-        }
-        if (target == "rs") {
-            targetx = -12.75;   // was +12.75 = the BLUE goal (copy of "bs"); red = -x like "ra"
-            targety = 18.5805750382;
-        }
+        if (target == "ba") setGoal(12.75, -18.5805750382, FACING_BA_DEG);
+        if (target == "bs") setGoal(12.75, 18.5805750382, FACING_BS_DEG);
+        if (target == "ra") setGoal(-12.75, -18.5805750382, FACING_RA_DEG);
+        if (target == "rs") setGoal(-12.75, 18.5805750382, FACING_RS_DEG);   // red = -x like "ra"
     }
+
+    private void setGoal(double gx, double gy, double facingDeg) {
+        goalX = gx;
+        goalY = gy;
+        goalFacing = Math.toRadians(facingDeg);
+        goalSet = true;
+    }
+
+    /**
+     * Aim point for where the robot is. Straight in front of the goal -> the front-center.
+     * Off to the side -> slide the aim point back INTO the goal (against the facing direction),
+     * so the ball clears the near side wall instead of clipping it.
+     */
+    private void updateAimPoint() {
+        if (!goalSet) return;                                   // tuners that set targetx/targety directly
+        double fromGoal = atan2(y - goalY, x - goalX);          // direction goal -> robot
+        double off = AngleUnit.normalizeRadians(fromGoal - goalFacing);
+        offAxisDeg = Math.toDegrees(off);
+        double frac = SMART_AIM ? Math.min(1, Math.abs(offAxisDeg) / Math.max(AIM_FULL_DEG, 1)) : 0;
+        aimDepth = AIM_DEPTH_MAX * frac;
+        targetx = goalX - aimDepth * Math.cos(goalFacing);
+        targety = goalY - aimDepth * Math.sin(goalFacing);
+    }
+
     public void track() {
+        updateAimPoint();                // targetx/targety = best aim point for where we are
         virGoal();                       // sets sx, sy, svx, svy, virX, virY, tofNow
         double h = (SOTM && sotmEnabled) ? heading + wbot * LATENCY_S : heading;
         double rx = virX - sx;
@@ -211,6 +239,11 @@ public class turret extends Subsystem {
         updateVelocity();
         double current = turretAngle();
         track();
+        aimTheta = theta;
+        if (lockMode) {                                  // hold still: aim at the lock angle, no feedforward
+            theta = Math.toRadians(lockAngleDeg);
+            wturret = 0;
+        }
         pidCalc(current);
         double ff = wturret;
         if (!reachable) ff = 0;                          // parked at a limit: no feedforward

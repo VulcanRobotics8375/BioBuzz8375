@@ -24,11 +24,14 @@ import org.firstinspires.ftc.teamcode.subSystems.Shooter;
 @TeleOp(name = "Flywheel Tuner", group = "Test")
 public class FlywheelTuner extends LinearOpMode {
     public static double LOW_RPM = 2500, HIGH_RPM = 3500;
-    public static double[] CHAR_POWERS = {0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0};
-    public static double SETTLE_S = 2.5;    // flywheels are slow to settle
+    // Only measure AROUND the shooting speeds (~1900-2600 rpm): a straight line fit over 0.3-1.0
+    // is a compromise that's off at both 2100 and 2400. Narrow range = accurate where you shoot.
+    public static double[] CHAR_POWERS = {0.48, 0.53, 0.58, 0.63, 0.68, 0.73};
+    public static double SETTLE_S = 3.0;    // flywheels are slow to settle
     public static double MEASURE_S = 1.0;
 
     Shooter shooter = new Shooter();
+    PanelsPads pads = new PanelsPads();   // real + Panels controllers merged
     TelemetryManager panels;
 
     @Override
@@ -45,13 +48,14 @@ public class FlywheelTuner extends LinearOpMode {
         String fitResult = "not run yet (press A)";
 
         while (opModeIsActive()) {
-            if (gamepad1.a && !lastA) fitResult = characterize();
-            if (gamepad1.x && !lastX) shooter.flywheelOn = !shooter.flywheelOn;
-            if (gamepad1.b && !lastB) Shooter.TARGET_RPM = (Shooter.TARGET_RPM == LOW_RPM) ? HIGH_RPM : LOW_RPM;
-            if (gamepad1.dpad_up && !lastUp) Shooter.TARGET_RPM += 250;
-            if (gamepad1.dpad_down && !lastDown) Shooter.TARGET_RPM = Math.max(0, Shooter.TARGET_RPM - 250);
-            lastA = gamepad1.a; lastB = gamepad1.b; lastX = gamepad1.x;
-            lastUp = gamepad1.dpad_up; lastDown = gamepad1.dpad_down;
+            pads.update(this);
+            if (pads.g1.a && !lastA) fitResult = characterize();
+            if (pads.g1.x && !lastX) shooter.flywheelOn = !shooter.flywheelOn;
+            if (pads.g1.b && !lastB) Shooter.TARGET_RPM = (Shooter.TARGET_RPM == LOW_RPM) ? HIGH_RPM : LOW_RPM;
+            if (pads.g1.dpad_up && !lastUp) Shooter.TARGET_RPM += 250;
+            if (pads.g1.dpad_down && !lastDown) Shooter.TARGET_RPM = Math.max(0, Shooter.TARGET_RPM - 250);
+            lastA = pads.g1.a; lastB = pads.g1.b; lastX = pads.g1.x;
+            lastUp = pads.g1.dpad_up; lastDown = pads.g1.dpad_down;
 
             shooter.updateFlywheel();
 
@@ -75,6 +79,7 @@ public class FlywheelTuner extends LinearOpMode {
         int n = CHAR_POWERS.length;
         double[] x = new double[n], y = new double[n];   // x = ticks/s, y = power scaled to 12 V
         int got = 0;
+        StringBuilder points = new StringBuilder();
 
         for (int i = 0; i < n && opModeIsActive(); i++) {
             double p = CHAR_POWERS[i];
@@ -97,6 +102,7 @@ public class FlywheelTuner extends LinearOpMode {
                 y[got] = p * (sumV / samples) / 12.0;   // what this power would be at 12 V
                 got++;
             }
+            if (samples > 0) points.append(String.format("%.2f->%.0f  ", p, x[got - 1] / Shooter.TICKS_PER_REV * 60));
         }
         shooter.flywheel.setPower(0);
         if (got < 2) return "not enough data";
@@ -110,7 +116,7 @@ public class FlywheelTuner extends LinearOpMode {
 
         Shooter.kV_FLY = kV;   // applied live; copy into Shooter.java to keep
         Shooter.kS_FLY = kS;
-        return String.format("kS_FLY = %.4f   kV_FLY = %.7f   (max rpm %.0f)", kS, kV,
-                x[got - 1] / Shooter.TICKS_PER_REV * 60);
+        return String.format("kS_FLY = %.4f   kV_FLY = %.7f   (rpm range %.0f-%.0f)  points: %s", kS, kV,
+                x[0] / Shooter.TICKS_PER_REV * 60, x[got - 1] / Shooter.TICKS_PER_REV * 60, points);
     }
 }

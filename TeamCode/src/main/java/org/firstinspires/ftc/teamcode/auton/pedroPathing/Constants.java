@@ -31,14 +31,14 @@ import java.util.OptionalDouble;
 @Configurable
 
 public class Constants {
-    public static double headingkP1= 1.8;
+    public static double headingkP1= 1.8;  //6.485283857656124
     public static double headingkP2= 5; // 0   (not used: single heading kP like the tuner gives)
 
-    public static double forwardPrimarykP = 0.5006021564916031;
-    public static double forwardsSecondarykP = 0.18495912048767038; //0.05
-    public static double strafePrimarykP = 0.7897260354530434;
-    public static double strafeSecondarykP = 0.29178266823159366;
-    public static double natForwardDecelerationValue = 40.0;   // tuner measured 49.69; lower = starts braking earlier
+    public static double forwardPrimarykP = 0.4106623755650214;
+    public static double forwardsSecondarykP = 0.15172877467050583; //0.05
+    public static double strafePrimarykP = 0.6184572174397085;
+    public static double strafeSecondarykP = 0.22850341636276816;
+    public static double natForwardDecelerationValue = 60.11355565754844;  //40.0;   // tuner measured 49.69; lower = starts braking earlier
     public static double brakeAgreesionValue = 0.85;           // Foresight default 1.0
     // ^ these two are read ONCE when the app starts (Pedro takes a number, not a lambda) -> change + redeploy
     // The controllers below read these through () -> lambdas, so Panels edits apply LIVE.
@@ -159,7 +159,7 @@ public class Constants {
 
     // ===== RUN 4 (latest Foresight tuner output) =====
     // The 5 gains read the static fields at the top -> tune live in Panels.
-    public static ForesightConfig foresightConfig = new ForesightConfig(
+    /*public static ForesightConfig foresightConfig = new ForesightConfig(
             c -> {
                 Controller primaryTranslationalForward = Controller.proportional(() -> forwardPrimarykP);
                 Controller secondaryTranslationalForward = Controller.proportional(() -> forwardsSecondarykP);
@@ -186,7 +186,33 @@ public class Constants {
                 c.naturalStrafeDeceleration.set(87.93054687598296);
                 c.brakeAggression.set(brakeAgreesionValue);
             }
-    );
+    );*/
+public static ForesightConfig foresightConfig = new ForesightConfig(
+        c -> {
+            Controller primaryTranslationalForward = Controller.proportional(forwardPrimarykP);
+            Controller secondaryTranslationalForward = Controller.proportional(forwardsSecondarykP);
+            Controller primaryTranslationalLateral = Controller.proportional(strafePrimarykP);
+            Controller secondaryTranslationalLateral = Controller.proportional(strafeSecondarykP);
+
+            c.forwardTranslational.set(Controller.piecewise(secondaryTranslationalForward).put(2.5, primaryTranslationalForward));
+            c.strafeTranslational.set(Controller.piecewise(secondaryTranslationalLateral).put(2.5, primaryTranslationalLateral));
+
+            c.coast.set(Controller.proportionalFeedforward(0.013788768346213854));
+            c.brake.set(Controller.proportionalFeedforward(0.011720453094281776));
+
+            c.headingFeedback.set(Controller.proportional(headingkP1));
+            c.headingBrakeCoefficients.set(Vector2D.cartesian(0.0681475502127014, 0.005586884670659902));
+
+            c.linearBrakeCoefficients.set(Matrix.diag(0.1420886130642233, 0.1062352707877431));
+            c.quadraticBrakeCoefficients.set(Matrix.diag(8.145828972661458E-4, 0.0011453015151472784));
+
+            c.maxAchievableForwardVelocity.set(71.27643569939872);
+            c.maxAchievableStrafeVelocity.set(55.461144879011854);
+            c.naturalForwardDeceleration.set(natForwardDecelerationValue);
+            c.naturalStrafeDeceleration.set(76.21262281483376);
+            c.brakeAggression.set(brakeAgreesionValue);
+        }
+);
 
     public static Follower create(HardwareMap h) {
         return new Follower(
