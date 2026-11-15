@@ -22,6 +22,7 @@ import com.bylazar.telemetry.PanelsTelemetry;
 import com.bylazar.telemetry.TelemetryManager;
 import com.bylazar.field.PanelsField;
 import com.bylazar.field.FieldManager;
+import com.qualcomm.robotcore.hardware.HardwareMap;
 
 
 @Configurable
@@ -31,7 +32,7 @@ import com.bylazar.field.FieldManager;
     FieldManager field;
     private double axial, lateral, yaw;
     fieldCentricMecanum drive = new fieldCentricMecanum();
-    Intake Intake = new Intake();
+    Intake Intake;
     MotorOuttake Outtake = new MotorOuttake();
     Shooter shooter = new Shooter();
     IntakeSensor intakeSensor = new IntakeSensor();

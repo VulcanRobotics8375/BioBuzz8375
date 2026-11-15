@@ -6,18 +6,18 @@ import com.pedropathing.ivy.Command;
 import com.qualcomm.robotcore.hardware.DcMotor;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
 import com.qualcomm.robotcore.hardware.HardwareMap;
+import com.qualcomm.robotcore.hardware.Servo;
 
-public class Intake {
+public class autonIntake {
     private final DcMotor intakeMotor;
-    
-    public Intake(HardwareMap hardwareMap){
+    public autonIntake(HardwareMap hardwareMap){
         intakeMotor = hardwareMap.get(DcMotor.class,"intake_motor");
-        intakeMotor.setDirection(DcMotorSimple.Direction.REVERSE);
+        intakeMotor.setDirection(DcMotorSimple.Direction.FORWARD);
     }
     public Command off(){
         return instant(() -> intakeMotor.setPower(0.0));
     }
-    public Command on(){
-        return instant(() -> intakeMotor.setPower(1.0));
+    public Command on() {
+        return instant (() -> intakeMotor.setPower(0.4));
     }
 }
