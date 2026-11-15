@@ -90,8 +90,8 @@ public class Shooter extends Subsystem {
     private final ElapsedTime voltageTimer = new ElapsedTime();
     private double lastHood = -1, lastGate = -1;   // only send servo commands when they change
 
-    public static double flowerUpPose = 0.0;
-    public static double flowerDownPose = 0.3;
+    public static double flowerUpPose = 0.34;
+    public static double flowerDownPose = 0;
     @Override
     public void init(OpMode opMode) {
         instantiateSubsystem(opMode);
@@ -134,7 +134,7 @@ public class Shooter extends Subsystem {
         if (gamepad2.yWasPressed()) flywheelOn = !flywheelOn;
         if (gamepad2.xWasPressed()) intakeOn = !intakeOn;
         if (gamepad2.aWasPressed()) transferOn = !transferOn;
-        if (gamepad2.rightBumperWasPressed()) flowerOn = !flowerOn;
+        if (gamepad2.bWasPressed()) flowerOn = !flowerOn;
         boolean shootHeld = gamepad2.left_bumper;
 
         boolean wasFeeding = feeding;

@@ -20,10 +20,10 @@ public class ShotTable {
 
     //                         distance (in)   hood        rpm      tof (s)
     // sorted short -> long (lookup needs this order)
-    public static double[] D    = { 21.002, 25.436,  28.48423, 31.227,   35.397,  38, 41.1, 45, 48.6, 54.78, 69};
-    public static double[] HOOD = { 0.28,       0.28, 0.12,    0.21,   0.09,  0.11,  0.11, 0.07, 0.1, 0.09, 0.07 };
-    public static double[] RPM  = { 2025,       2000, 2100,     2050,  2100,  2090,  2100, 2100, 2138, 2160, 2300 };
-    public static double[] TOF  = { 0.46,       0.47, 0.33,    0.56,   0.55,  00.59,  0.47, 0.68, 0.49,  0.67, 0.68};   // measured (only used if SOTM on)
+    public static double[] D    = { 21.002, 25.436,  28.48423, 31.227,   35.397,  38, 41.1, 45, 48.6, 54.78, 69, 80.07, 88.2384};
+    public static double[] HOOD = { 0.28,       0.28, 0.12,    0.21,   0.09,  0.11,  0.11, 0.07, 0.1, 0.09, 0.07, 0.02, 0.02 };
+    public static double[] RPM  = { 2025,       2000, 2100,     2050,  2100,  2090,  2100, 2100, 2138, 2160, 2300, 2200, 2225 };
+    public static double[] TOF  = { 0.46,       0.47, 0.33,    0.56,   0.55,  00.59,  0.47, 0.68, 0.49,  0.67, 0.68, 0.51, 0.68};   // measured (only used if SOTM on)
 
     // Optional: fix the hood when the flywheel is slow (e.g. 4th ball of a burst). Hood units per
     // RPM of error (target - actual). 0 = off. Measure: at one distance, drop rpm 100, find the hood

@@ -41,7 +41,8 @@ import java.util.Locale;
 @Configurable
 @TeleOp(name = "Shot Table Tuner", group = "Test")
 public class ShotTableTuner extends OpMode {
-    public static double START_X = -63, START_Y = -63, START_H_DEG = 90;   // same as MainOpMode
+    // Panels frame. Old (-63, -63, 90 deg) rotated -90 deg -> (-63, 63, 0 deg). MUST match where you put the robot.
+    public static double START_X = -63, START_Y = 63, START_H_DEG = 0;
     public static double RPM_STEP = 50, HOOD_STEP = 0.01;
     public static boolean DRIVE_ON = false;   // false = drive motors off + FLOAT: push the robot by hand
     public static double MAX_RPM = 3600;   // keep headroom below the ~4200 max for recovery
@@ -112,8 +113,8 @@ public class ShotTableTuner extends OpMode {
 
         // ---- goal: same pick as MainOpMode (g2 RB = switch alliance) ----
         if (pads.g2.rightBumperWasPressed()) alliance = !alliance;
-        if (alliance) turret.targetUpdate(loc.getY() <= 0 ? "ba" : "bs");
-        else          turret.targetUpdate(loc.getY() <= 0 ? "ra" : "rs");
+        if (alliance) turret.targetUpdate(loc.getX() <= 0 ? "ba" : "bs");   // side split (was y <= 0)
+        else          turret.targetUpdate(loc.getX() <= 0 ? "ra" : "rs");
 
         // ---- turret: LOCKED straight forward (still computes distance + where the goal is) ----
         turret.x = loc.getX();

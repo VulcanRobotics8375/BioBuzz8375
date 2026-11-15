@@ -20,7 +20,7 @@ private Servo TransferServo = null; //actually its the adaptive hood servo {
 
     @Override
     public void init() {
-            TransferServo = hardwareMap.get(Servo.class, "transfer_servo");
+            TransferServo = hardwareMap.get(Servo.class, "flower_servo");
             angle = TransferServo.getPosition();
         }
 

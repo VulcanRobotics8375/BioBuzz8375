@@ -29,7 +29,7 @@ public class turret extends Subsystem {
     public static boolean SMART_AIM = true;
     public static double AIM_DEPTH_MAX = 0;     // in: how far INTO the goal to aim at full off-axis angle (0 = off)
     public static double AIM_FULL_DEG = 60;     // off-axis angle where the full depth is used (linear below it)
-    public double goalX = 12.75, goalY = -18.5805750382, goalFacing = 0;  // front-center of the chosen goal
+    public double goalX = -18.5805750382, goalY = -12.75, goalFacing = 0;  // front-center of the chosen goal
     // LOCK: hold the turret at lockAngleDeg instead of aiming (Shot Table Tuner). track() still runs, so
     // d (distance) and aimTheta (where the goal is, relative to the robot) keep updating.
     public boolean lockMode = false;
@@ -40,7 +40,7 @@ public class turret extends Subsystem {
     private static double minA() { return Math.toRadians(MIN_ANGLE_DEG); }
     private static double maxA() { return Math.toRadians(MAX_ANGLE_DEG); }
     public boolean reachable = false;
-    public double wturret, theta, wbot, vtan, d, targety=-18.5805750382, targetx=12.75, x, y, vx, vy, heading, pError, vError, virX, virY;
+    public double wturret, theta, wbot, vtan, d, targety=-12.75, targetx=-18.5805750382, x, y, vx, vy, heading, pError, vError, virX, virY;
 //    public static double kP = 3.5, kD=0.08;   // kP is now (rad/s asked for) per (rad of error)
     public static double kP = 4, kD=0.0575;   // kP is now (rad/s asked for) per (rad of error)
     //P:4, I:14, D:0.05
@@ -59,7 +59,7 @@ public class turret extends Subsystem {
     // Turret pivot relative to the robot center Pinpoint tracks (robot frame: +x forward, +y left).
     // Same numbers as AprilTag.TURRET_DX/DY.
     public static double TURRET_DX = -0.835, TURRET_DY = 0;
-    public static boolean SOTM = false;        // false = aim straight at the real goal (no lead)
+    public static boolean SOTM = true;        // false = aim straight at the real goal (no lead)
     public static double LATENCY_S = 0.10;    // aim where the robot WILL be when the ball leaves
     public static double TOF_SCALE = 1.0;     // >1 = lead more, <1 = lead less (tune Thursday)
     public static double VG_MAX_SHIFT = 60;   // in: virtual goal never moves further than this
@@ -153,10 +153,13 @@ public class turret extends Subsystem {
     } // turrent angle from encoder
 
     public void  targetUpdate(String target) {
-        if (target == "ba") setGoal(12.75, -18.5805750382, FACING_BA_DEG);
-        if (target == "bs") setGoal(12.75, 18.5805750382, FACING_BS_DEG);
-        if (target == "ra") setGoal(-12.75, -18.5805750382, FACING_RA_DEG);
-        if (target == "rs") setGoal(-12.75, 18.5805750382, FACING_RS_DEG);   // red = -x like "ra"
+        // Field frame = Panels frame (rotated -90 deg from the old one: old (x, y) -> new (y, -x)).
+        // old: ba (12.75, -18.58)  bs (12.75, 18.58)  ra (-12.75, -18.58)  rs (-12.75, 18.58)
+        // Colors SWAPPED by hand (blue = +y, red = -y). Each goal uses its own FACING_ value.
+        if (target == "ra") setGoal(-18.5805750382, -12.75, FACING_RA_DEG);
+        if (target == "rs") setGoal(18.5805750382, -12.75, FACING_RS_DEG);
+        if (target == "ba") setGoal(-18.5805750382, 12.75, FACING_BA_DEG);
+        if (target == "bs") setGoal(18.5805750382, 12.75, FACING_BS_DEG);   // blue = +y side
     }
 
     private void setGoal(double gx, double gy, double facingDeg) {

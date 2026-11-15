@@ -1,6 +1,10 @@
 package org.firstinspires.ftc.teamcode.auton;
 
 import static com.pedropathing.ivy.commands.Commands.instant;
+import static com.pedropathing.ivy.commands.Commands.waitMs;
+import static com.pedropathing.ivy.commands.Commands.waitUntil;
+import static com.pedropathing.ivy.groups.Groups.race;
+import static com.pedropathing.ivy.groups.Groups.sequential;
 
 import com.bylazar.configurables.annotations.Configurable;
 import com.pedropathing.ivy.Command;
@@ -14,15 +18,18 @@ import com.qualcomm.robotcore.util.ElapsedTime;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.CurrentUnit;
+import org.firstinspires.ftc.teamcode.subSystems.Shooter;
 
 @Configurable
 public class Flywheel {
 
     // ---------------- flywheel ----------------
     public static boolean FLYWHEEL_REVERSE = true;   // flip if "rpm" reads negative while shooting (applied at init)
-    public static double TARGET_RPM = 2100;
+    public static double TARGET_RPM = 2090;
     public static double TICKS_PER_REV = 28;         // motor encoder ticks per rev
     // feedforward, fit with Flywheel Tuner: power needed at 12 V = kS + kV * (ticks/s)
+    // NOTE: kS/kV/kP, bang thresholds and VEL_FILTER below are NOT USED any more:
+    // updateFlywheel() reads Shooter's tuned values. Only TARGET_RPM / HOOD_POS here matter for auton.
     public static double kS_FLY = 0.028;
     public static double kV_FLY = 0.0004719;      // placeholder (MotorOuttake's value) until you fit it
     public static double kP_FLY = 0.0018;             // power per (tick/s) of speed error
@@ -38,15 +45,15 @@ public class Flywheel {
     public static double VOLTAGE_PERIOD_S = 0.25;    // how often to read battery voltage
 
     // ---------------- hood ----------------
-    public static double HOOD_POS = 0.09;             // later: set from the shot table with setHood()
+    public static double HOOD_POS = 0.11;             // later: set from the shot table with setHood()
 
     // ---------------- intake ----------------
-    public static double INTAKE_POWER = -0.6;
+    public static double INTAKE_POWER = -1.0;
     public static double INTAKE_REVERSE_POWER = 0.4;
 
     // ---------------- transfer + gate ----------------
     public static double TRANSFER_FEED = -1.0;       // while shooting
-    public static double TRANSFER_HOLD = -0.675;     // pushing balls against the closed gate: LOWER = less current
+    public static double TRANSFER_HOLD = -0.75;     // pushing balls against the closed gate: LOWER = less current
     public static double GATE_CLOSED = 0.4;          // swap these two if the gate works backwards
     public static double GATE_OPEN = 0.65;
     // Auto shot: MainOpMode sets RPM + hood from ShotTable every loop (using turret.d).
@@ -59,11 +66,11 @@ public class Flywheel {
 
     // ---------------- hardware ----------------
     public DcMotorEx flywheel, intakeMotor, transferMotor;
-    public Servo gateServo, hoodServo;
+    public Servo gateServo, hoodServo, flowerServo;
     private VoltageSensor battery;
 
     // ---------------- state ----------------
-    public boolean flywheelOn = false, intakeOn = false, transferOn = false;
+    public boolean flywheelOn = false, intakeOn = false, transferOn = false, flowerOn = false;
     public boolean intakeBlocked = false;   // set by IntakeSensor: ball sitting at the intake -> stop it
     public boolean ready = false, feeding = false, bangMode = false;
     public double rpm = 0, tps = 0, flyPower = 0, voltage = 12;
@@ -90,6 +97,7 @@ public class Flywheel {
         gateServo = hardwareMap.get(Servo.class, "transfer_servo");
         hoodServo = hardwareMap.get(Servo.class, "hood_servo");
         hoodServo.setDirection(Servo.Direction.REVERSE);
+        flowerServo = hardwareMap.get(Servo.class, "flower_servo");
 
         battery = hardwareMap.voltageSensor.iterator().next();
         voltage = battery.getVoltage();
@@ -113,11 +121,13 @@ public class Flywheel {
             intakeMotor.setPower(0);
         }
 
+        // hood ALWAYS (so it's already in place when the first ball arrives)
+        hoodServo.setPosition(HOOD_POS);
+
         // Gate & Transfer control
         if (feeding) {
             gateServo.setPosition(GATE_OPEN);
             transferMotor.setPower(TRANSFER_FEED);
-            hoodServo.setPosition(HOOD_POS);
             if (rpm < burstMinRpm) {
                 burstMinRpm = rpm;
             }
@@ -125,6 +135,8 @@ public class Flywheel {
             gateServo.setPosition(GATE_CLOSED);
             transferMotor.setPower(transferOn ? TRANSFER_HOLD : 0);
         }
+        if(flowerOn) {flowerServo.setPosition(0);}
+        else {flowerServo.setPosition(0.34);}
     }
 
     public void updateFlywheel() {
@@ -133,7 +145,9 @@ public class Flywheel {
             voltageTimer.reset();
         }
 
-        tps = VEL_FILTER * flywheel.getVelocity() + (1 - VEL_FILTER) * tps;
+        // Gains/filter come from Shooter (the TUNED teleop values) so auton and teleop always match.
+        double velFilter = Shooter.VEL_FILTER;
+        tps = velFilter * flywheel.getVelocity() + (1 - velFilter) * tps;
         rpm = tps / TICKS_PER_REV * 60.0;
 
         if (!flywheelOn) {
@@ -146,8 +160,8 @@ public class Flywheel {
 
         double errRpm = TARGET_RPM - rpm;
 
-        double enter = feeding ? FEED_BANG_ENTER_RPM : BANG_ENTER_RPM;
-        double exit  = feeding ? FEED_BANG_EXIT_RPM  : BANG_EXIT_RPM;
+        double enter = feeding ? Shooter.FEED_BANG_ENTER_RPM : Shooter.BANG_ENTER_RPM;
+        double exit  = feeding ? Shooter.FEED_BANG_EXIT_RPM  : Shooter.BANG_EXIT_RPM;
         if (errRpm > enter) bangMode = true;
         else if (errRpm < exit) bangMode = false;
 
@@ -157,7 +171,7 @@ public class Flywheel {
         } else {
             double targetTps = TARGET_RPM / 60.0 * TICKS_PER_REV;
             double comp = 12.0 / Math.max(voltage, 8.0);
-            cmd = (kS_FLY + kV_FLY * targetTps + kP_FLY * (targetTps - tps)) * comp;
+            cmd = (Shooter.kS_FLY + Shooter.kV_FLY * targetTps + Shooter.kP_FLY * (targetTps - tps)) * comp;
         }
         flyPower = Math.max(0, Math.min(1, cmd));
         flywheel.setPower(flyPower);
@@ -166,6 +180,37 @@ public class Flywheel {
     }
 
     // ---------------- Ivy Commands ----------------
+    // EXPLICIT on/off commands: unlike toggles they can't get out of sync if a step is added/removed.
+    public Command flywheelOn()  { return instant(() -> flywheelOn = true); }
+    public Command flywheelOff() { return instant(() -> flywheelOn = false); }
+    public Command intakeOn()    { return instant(() -> intakeOn = true); }
+    public Command intakeOff()   { return instant(() -> intakeOn = false); }
+    public Command transferOn()  { return instant(() -> transferOn = true); }
+    public Command transferOff() { return instant(() -> transferOn = false); }
+    public Command flowerOn()    { return instant(() -> flowerOn = true); }
+    public Command flowerOff()   { return instant(() -> flowerOn = false); }
+    public Command allOff() {
+        return instant(() -> { flywheelOn = false; intakeOn = false; transferOn = false; feeding = false; flowerOn = false; });
+    }
+    /** Set the shot for the NEXT shoot() (rpm + hood). */
+    public Command setShot(double rpm, double hood) {
+        return instant(() -> { TARGET_RPM = rpm; HOOD_POS = hood; });
+    }
+    /**
+     * Shoot: wait until the flywheel is READY (max timeoutMs, so a slow flywheel can't freeze the auton),
+     * settle a moment, open the gate + feed for feedMs, then close the gate.
+     */
+    public Command shoot(double feedMs, double timeoutMs) {
+        return sequential(
+                instant(() -> flywheelOn = true),
+                race(waitUntil(() -> ready), waitMs(timeoutMs)),
+                waitMs(250),                                   // let rpm settle after reaching the band
+                instant(() -> { feeding = true; transferOn = true; burstMinRpm = rpm; }),
+                waitMs(feedMs),
+                instant(() -> { feeding = false; lastBurstMinRpm = burstMinRpm; })
+        );
+    }
+
 
     /**
      * Toggles the flywheel on or off immediately.
@@ -204,6 +249,9 @@ public class Flywheel {
         return instant (() -> feeding = !feeding);
     }
 
+    public Command toggleFlower(){
+        return instant(() -> flowerOn = !flowerOn);
+    }
     /**
      * Opens the gate and feeds into the flywheel while held (only if flywheel is on).
      */
