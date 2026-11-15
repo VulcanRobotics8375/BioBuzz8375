@@ -1,9 +1,13 @@
 package org.firstinspires.ftc.teamcode.subSystems;
 
+import static com.pedropathing.ivy.commands.Commands.instant;
+
+import com.pedropathing.ivy.Command;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DcMotorSimple;
+import com.qualcomm.robotcore.hardware.HardwareMap;
 import com.qualcomm.robotcore.hardware.Servo;
 
 import robotcore.Subsystem;
@@ -26,6 +30,7 @@ public class Intake extends Subsystem {
         transferMotor.setDirection(DcMotorSimple.Direction.REVERSE);
         transferServo = hardwareMap.get(Servo.class,"transfer_servo");
     }
+
     public void runIntake() {
         if (gamepad2.xWasPressed()) {
             intake = !intake;

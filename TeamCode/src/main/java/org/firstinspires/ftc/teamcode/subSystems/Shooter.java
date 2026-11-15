@@ -77,11 +77,11 @@ public class Shooter extends Subsystem {
 
     // ---------------- hardware ----------------
     public DcMotorEx flywheel, intakeMotor, transferMotor;
-    public Servo gateServo, hoodServo;
+    public Servo gateServo, hoodServo, flowerServo;
     private VoltageSensor battery;
 
     // ---------------- state ----------------
-    public boolean flywheelOn = false, intakeOn = false, transferOn = false;
+    public boolean flywheelOn = false, intakeOn = false, transferOn = false, flowerOn = false;
     public boolean intakeBlocked = false;   // set by IntakeSensor: ball sitting at the intake -> stop it
     public boolean ready = false, feeding = false, bangMode = false;
     public double rpm = 0, tps = 0, flyPower = 0, voltage = 12;
@@ -90,6 +90,8 @@ public class Shooter extends Subsystem {
     private final ElapsedTime voltageTimer = new ElapsedTime();
     private double lastHood = -1, lastGate = -1;   // only send servo commands when they change
 
+    public static double flowerUpPose = 0.0;
+    public static double flowerDownPose = 0.3;
     @Override
     public void init(OpMode opMode) {
         instantiateSubsystem(opMode);
@@ -107,6 +109,7 @@ public class Shooter extends Subsystem {
         gateServo = hardwareMap.get(Servo.class, "transfer_servo");
         hoodServo = hardwareMap.get(Servo.class, "hood_servo");
         hoodServo.setDirection(Servo.Direction.REVERSE);
+        flowerServo = hardwareMap.get(Servo.class, "flower_servo");
 
         battery = hardwareMap.voltageSensor.iterator().next();
         voltage = battery.getVoltage();
@@ -131,6 +134,7 @@ public class Shooter extends Subsystem {
         if (gamepad2.yWasPressed()) flywheelOn = !flywheelOn;
         if (gamepad2.xWasPressed()) intakeOn = !intakeOn;
         if (gamepad2.aWasPressed()) transferOn = !transferOn;
+        if (gamepad2.rightBumperWasPressed()) flowerOn = !flowerOn;
         boolean shootHeld = gamepad2.left_bumper;
 
         boolean wasFeeding = feeding;
@@ -160,6 +164,8 @@ public class Shooter extends Subsystem {
         else if (gamepad2.right_trigger_pressed) intakeMotor.setPower(vc(INTAKE_REVERSE_POWER));  // reverse always works
         else if (intakeBlocked) intakeMotor.setPower(0);
         else intakeMotor.setPower(vc(INTAKE_POWER));
+        if (!flowerOn) {flowerServo.setPosition(flowerUpPose);}
+        else if (flowerOn) {flowerServo.setPosition(flowerDownPose);}
 
         addTelemetry();
     }
