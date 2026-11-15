@@ -4,6 +4,7 @@ import com.bylazar.configurables.annotations.Configurable;
 import com.qualcomm.robotcore.eventloop.opmode.OpMode;
 import com.qualcomm.robotcore.hardware.DigitalChannel;
 import com.qualcomm.robotcore.hardware.DistanceSensor;
+import com.qualcomm.robotcore.hardware.LED;
 
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 
@@ -16,6 +17,7 @@ import robotcore.Subsystem;
  *   "intake_dist"  REV 2m Distance Sensor, any I2C port
  *   "led_ball"     Digital Device, digital port 0-1, channel 0   -> ON while a ball is seen
  *   "led_zone"     Digital Device, digital port 0-1, channel 1   -> ON while the robot is in a shootable spot
+ * The LEDs can be configured as "Digital Device" OR "LED" - both work.
  * Anything missing from the config is just skipped (no crash), telemetry says so.
  *
  * Intake: a ball closer than BALL_MM for longer than BLOCK_S -> `blocked` = true -> Shooter stops the intake.
@@ -34,10 +36,12 @@ public class IntakeSensor extends Subsystem {
     public static double ZONE_MIN_IN = -1;
     public static double ZONE_MAX_IN = -1;
     // ---- LEDs ----
-    public static boolean LED_ON_STATE = true;  // flip if the LEDs are lit when they should be off
+    // pin voltage that LIGHTS the LED: true = HIGH (pin -> resistor -> LED -> GND), false = LOW (3.3V -> LED -> pin)
+    public static boolean LED_ON_STATE = true;
+    public static long READ_PERIOD_MS = 40;     // pause between sensor reads so the thread doesn't hog the hub
 
     private DistanceSensor sensor;
-    private DigitalChannel ledBall, ledZone;
+    private Object ledBall, ledZone;   // DigitalChannel or LED, whichever the config uses
 
     private volatile double distMm = Double.POSITIVE_INFINITY;   // latest reading from the thread
     private volatile double readMs = 0;                          // how long one read takes (telemetry)
@@ -48,15 +52,14 @@ public class IntakeSensor extends Subsystem {
     public boolean blocked = false;    // ball seen for longer than BLOCK_S -> stop intake
     public boolean shootable = false;
     private long closeSinceNanos = -1;
+    private boolean lastBall = false, lastZone = false;
 
     @Override
     public void init(OpMode opMode) {
         instantiateSubsystem(opMode);
         sensor = hardwareMap.tryGet(DistanceSensor.class, "intake_dist");
-        ledBall = hardwareMap.tryGet(DigitalChannel.class, "led_ball");
-        ledZone = hardwareMap.tryGet(DigitalChannel.class, "led_zone");
-        if (ledBall != null) ledBall.setMode(DigitalChannel.Mode.OUTPUT);
-        if (ledZone != null) ledZone.setMode(DigitalChannel.Mode.OUTPUT);
+        ledBall = findLed("led_ball");
+        ledZone = findLed("led_zone");
         setLed(ledBall, false);
         setLed(ledZone, false);
 
@@ -69,6 +72,7 @@ public class IntakeSensor extends Subsystem {
                         double d = sensor.getDistance(DistanceUnit.MM);
                         readMs = (System.nanoTime() - t0) / 1e6;
                         distMm = Double.isNaN(d) ? Double.POSITIVE_INFINITY : d;
+                        Thread.sleep(READ_PERIOD_MS);   // a non-stop read loop floods the hub and slows the main loop
                     } catch (Exception e) {
                         break;   // OpMode ended / sensor gone
                     }
@@ -98,8 +102,8 @@ public class IntakeSensor extends Subsystem {
         double hi = ZONE_MAX_IN >= 0 ? ZONE_MAX_IN : ShotTable.D[ShotTable.D.length - 1];
         shootable = t.dReal >= lo && t.dReal <= hi && t.reachable && !t.faulted;
 
-        setLed(ledBall, ballSeen);
-        setLed(ledZone, shootable);
+        if (ballSeen != lastBall) { setLed(ledBall, ballSeen); lastBall = ballSeen; }   // each write = a hub command
+        if (shootable != lastZone) { setLed(ledZone, shootable); lastZone = shootable; }
 
         telemetry.addData("intake sensor", sensor == null ? "NOT IN CONFIG (intake_dist)"
                 : String.format("%.0f mm  ball %s  %s  (read %.0f ms)", d > 8000 ? -1 : d,
@@ -116,7 +120,18 @@ public class IntakeSensor extends Subsystem {
         setLed(ledZone, false);
     }
 
-    private void setLed(DigitalChannel led, boolean on) {
-        if (led != null) led.setState(on == LED_ON_STATE);
+    private Object findLed(String name) {
+        DigitalChannel c = hardwareMap.tryGet(DigitalChannel.class, name);
+        if (c != null) {
+            c.setMode(DigitalChannel.Mode.OUTPUT);
+            return c;
+        }
+        return hardwareMap.tryGet(LED.class, name);   // null if not in the config at all
+    }
+
+    private void setLed(Object led, boolean on) {
+        boolean high = (on == LED_ON_STATE);           // the pin voltage we want
+        if (led instanceof DigitalChannel) ((DigitalChannel) led).setState(high);
+        else if (led instanceof LED) ((LED) led).enable(!high);   // SDK LED type: enable(true) = pin LOW
     }
 }

@@ -14,13 +14,16 @@ package org.firstinspires.ftc.teamcode.subSystems;
 @com.bylazar.configurables.annotations.Configurable
 public class ShotTable {
     public static boolean USE_FIT = false;
+    // true = use the CLOSEST row as-is (only shots you actually tested, no blending between rows).
+    // Good when neighbouring rows use different hood/rpm combos. Rows every ~3-4 in -> never >2 in from a tested row.
+    public static boolean USE_NEAREST = false;
 
     //                         distance (in)   hood        rpm      tof (s)
     // sorted short -> long (lookup needs this order)
-    public static double[] D    = { 25.95,      36.87,      45.25,   52.41 };
-    public static double[] HOOD = { 0.25,       0.15,       0.09,    0.07 };
-    public static double[] RPM  = { 2070,       2040,       2100,    2100 };
-    public static double[] TOF  = { 0.35,       0.40,       0.44,    0.47 };   // GUESSES - measure with slow-mo
+    public static double[] D    = { 21.002, 25.436,  28.48423, 31.227,   35.397,  38, 41.1, 45, 48.6, 54.78, 69};
+    public static double[] HOOD = { 0.28,       0.28, 0.12,    0.21,   0.09,  0.11,  0.11, 0.07, 0.1, 0.09, 0.07 };
+    public static double[] RPM  = { 2025,       2000, 2100,     2050,  2100,  2090,  2100, 2100, 2138, 2160, 2300 };
+    public static double[] TOF  = { 0.46,       0.47, 0.33,    0.56,   0.55,  00.59,  0.47, 0.68, 0.49,  0.67, 0.68};   // measured (only used if SOTM on)
 
     // Optional: fix the hood when the flywheel is slow (e.g. 4th ball of a burst). Hood units per
     // RPM of error (target - actual). 0 = off. Measure: at one distance, drop rpm 100, find the hood
@@ -39,10 +42,15 @@ public class ShotTable {
     }
 
     private static double lookup(double d, double[] y) {
-        int n = D.length;
+        int n = Math.min(D.length, y.length);   // safety: a row missing from one column can't crash it
         double dc = Math.max(D[0], Math.min(D[n - 1], d));   // clamp to measured range
+        if (USE_NEAREST) {
+            int best = 0;
+            for (int i = 1; i < n; i++) if (Math.abs(D[i] - dc) < Math.abs(D[best] - dc)) best = i;
+            return y[best];
+        }
         if (USE_FIT && n >= 4) {
-            double[] c = fitQuadratic(D, y);
+            double[] c = fitQuadratic(java.util.Arrays.copyOf(D, n), java.util.Arrays.copyOf(y, n));
             return c[0] + c[1] * dc + c[2] * dc * dc;
         }
         for (int i = 0; i < n - 1; i++) {

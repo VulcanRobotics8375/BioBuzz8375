@@ -38,7 +38,7 @@ import com.bylazar.field.FieldManager;
     PanelsPads pads = new PanelsPads();   // real + Panels controllers merged
 
     //    localizer loc = new localizer(-63, -63, 0);
-    public static double startx=63, starty=63, starth=-Math.PI/2;
+    public static double startx=12.75, starty=63, starth=-Math.PI/2;
     localizer loc = new localizer(startx, starty, starth);
 
     GoBildaPinpointDriver odo;
@@ -50,9 +50,17 @@ import com.bylazar.field.FieldManager;
     public boolean alliance = true; //true = blue, red = false
 
     long lastLoopNanos = System.nanoTime();
+    public static long PANELS_PERIOD_MS = 50;   // Panels graphs + field drawing at 20 Hz, not every loop
+    java.util.List<LynxModule> hubs;
+    long lastPanelsMs = 0;
+    // loop profiler: worst time of each part over the last second
+    double[] secMax = new double[5], secShow = new double[5];
+    double loopMax = 0, loopMaxShow = 0, loopSum = 0; int loopCount = 0; double loopAvgShow = 0;
+    long profWindowStart = System.nanoTime();
 
     public void init() {
-        for (LynxModule hub : hardwareMap.getAll(LynxModule.class)) {
+        hubs = hardwareMap.getAll(LynxModule.class);
+        for (LynxModule hub : hubs) {
             hub.setBulkCachingMode(LynxModule.BulkCachingMode.MANUAL);
         }
         panels = PanelsTelemetry.INSTANCE.getTelemetry();
@@ -78,14 +86,16 @@ import com.bylazar.field.FieldManager;
 
     @Override
     public void loop() {
-        for (LynxModule hub : hardwareMap.getAll(LynxModule.class)) hub.clearBulkCache();
+        long t0 = System.nanoTime();
+        for (LynxModule hub : hubs) hub.clearBulkCache();
         pads.update(this);
 
         axial = pads.g1.left_stick_y;
         lateral = -pads.g1.left_stick_x;
         yaw = -pads.g1.right_stick_x;
 
-        drive.fieldCentric(axial, lateral, yaw);
+        drive.fieldCentric(axial, lateral, yaw);   // also reads the Pinpoint
+        long t1 = System.nanoTime();
 //        Intake.runIntake();
 //        Outtake.runOuttake();
 
@@ -133,12 +143,15 @@ import com.bylazar.field.FieldManager;
         turret.vy = vx * Math.sin(offset) + vy * Math.cos(offset);
         turret.wbot = odo.getHeadingVelocity(UnnormalizedAngleUnit.RADIANS);
         turret.tUpdate();          // also computes the virtual goal + turret.d (virtual distance)
+        long t2 = System.nanoTime();
 
         // shooter AFTER the turret, so RPM/hood use this loop's (virtual) distance
         intakeSensor.update(turret);                     // ball at intake? shootable spot? -> LEDs
         shooter.intakeBlocked = intakeSensor.blocked;
         shooter.setShot(turret.d); // only does something when Shooter.AUTO_SHOT = true
         shooter.update();
+        long t3 = System.nanoTime();
+        boolean panelsDue = System.currentTimeMillis() - lastPanelsMs >= PANELS_PERIOD_MS;
 
 //        if (apriltag.localize(turret.turretAngle(), loc.getH())) {
 //            if (pads.g2.left_trigger_pressed) {
@@ -155,6 +168,7 @@ import com.bylazar.field.FieldManager;
         //everything above is tracking
 
         double fx = loc.getX(), fy = loc.getY(), fh = loc.getH();
+        if (panelsDue) {
         field.moveCursor(fx, fy);
         field.setStyle("black", "red", 1);
         field.circle(9.0);
@@ -177,6 +191,7 @@ import com.bylazar.field.FieldManager;
 
         //telmetry block
         field.update();
+        }
         if (alliance){
             telemetry.addData("alliance:", "BLUE");
         } else{
@@ -184,9 +199,9 @@ import com.bylazar.field.FieldManager;
         }
         telemetry.addData("sawTag:", sawTag).addData("xDiff:", apriltag.camX - loc.getX()).addData("yDiff:", apriltag.camY - loc.getY());
         telemetry.addData("offset deg", Math.toDegrees(offset));
-        long now = System.nanoTime();
-        telemetry.addData("loop ms", "%.0f", (now - lastLoopNanos) / 1e6);
-        lastLoopNanos = now;
+        telemetry.addData("loop ms", "avg %.0f  worst %.0f  (last 1 s)", loopAvgShow, loopMaxShow);
+        telemetry.addData("worst ms: drive+odo / turret / shooter+sensor / telemetry", "%.0f / %.0f / %.0f / %.0f",
+                secShow[0], secShow[1], secShow[2], secShow[3]);
         telemetry.addData("turret want (deg)", "%.1f", Math.toDegrees(turret.theta));
         telemetry.addData("turret at (deg)", "%.1f", Math.toDegrees(turret.turretAngle()));
         telemetry.addData("turret error (deg)", "%.1f", Math.toDegrees(turret.pError));
@@ -198,6 +213,7 @@ import com.bylazar.field.FieldManager;
         telemetry.addData("turret FAULT", turret.faulted ? "YES: " + turret.faultReason : "no");
         telemetry.addData("kP / kD", "%.3f / %.5f", turret.kP, turret.kD);
         telemetry.addData("robot x, y, h", "%.1f, %.1f, %.1f", loc.getX(), loc.getY(), Math.toDegrees(loc.getH()));
+        if (panelsDue) {
         panels.addData("turret error (deg)", Math.toDegrees(turret.pError));
         panels.addData("turret target (deg)", Math.toDegrees(turret.theta));
         panels.addData("turret at (deg)", Math.toDegrees(turret.turretAngle()));
@@ -207,13 +223,33 @@ import com.bylazar.field.FieldManager;
         panels.addData("tof (s)", turret.tofNow);
         panels.addData("flywheel rpm", shooter.rpm);
         panels.addData("target rpm", Shooter.TARGET_RPM);
+        panels.update();
+        lastPanelsMs = System.currentTimeMillis();
+        }
         telemetry.addData("SOTM", "%s  virtual d %.1f  real d %.1f  tof %.2f  lead %.1f in",
                 turret.SOTM ? "on" : "off", turret.d, turret.dReal, turret.tofNow,
                 Math.hypot(turret.virX - turret.targetx, turret.virY - turret.targety));
         telemetry.addData("shot", "%s  rpm %.0f  hood %.3f",
                 Shooter.AUTO_SHOT ? "AUTO (table)" : "manual", Shooter.TARGET_RPM, Shooter.HOOD_POS);
-        panels.update();
         telemetry.update();
+
+        // ---- profiler ----
+        long t4 = System.nanoTime();
+        double[] parts = {(t1 - t0) / 1e6, (t2 - t1) / 1e6, (t3 - t2) / 1e6, (t4 - t3) / 1e6};
+        for (int i = 0; i < 4; i++) secMax[i] = Math.max(secMax[i], parts[i]);
+        double loopMs = (t4 - lastLoopNanos) / 1e6;   // full loop, including SDK time between loops
+        lastLoopNanos = t4;
+        loopMax = Math.max(loopMax, loopMs);
+        loopSum += loopMs;
+        loopCount++;
+        if (t4 - profWindowStart > 1e9) {
+            System.arraycopy(secMax, 0, secShow, 0, 5);
+            java.util.Arrays.fill(secMax, 0);
+            loopMaxShow = loopMax;
+            loopAvgShow = loopSum / Math.max(loopCount, 1);
+            loopMax = 0; loopSum = 0; loopCount = 0;
+            profWindowStart = t4;
+        }
     }
 
     @Override

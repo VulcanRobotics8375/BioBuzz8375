@@ -38,33 +38,33 @@ public class Shooter extends Subsystem {
 
     // ---------------- flywheel ----------------
     public static boolean FLYWHEEL_REVERSE = true;   // flip if "rpm" reads negative while shooting (applied at init)
-    public static double TARGET_RPM = 2325;
+    public static double TARGET_RPM = 2090;
     public static double TICKS_PER_REV = 28;         // motor encoder ticks per rev
     // feedforward, fit with Flywheel Tuner: power needed at 12 V = kS + kV * (ticks/s)
-    public static double kS_FLY = 0.028;
+    public static double kS_FLY = 0.06;
     public static double kV_FLY = 0.0004719;      // placeholder (MotorOuttake's value) until you fit it
-    public static double kP_FLY = 0.0018;             // power per (tick/s) of speed error
+    public static double kP_FLY = 0.0083;             // power per (tick/s) of speed error
     // bang-bang
     public static double BANG_POWER = 1.0;
-    public static double BANG_ENTER_RPM = 210;       // go full power when this far BELOW target
-    public static double BANG_EXIT_RPM = 200;        // hand back to FF+P when within this much below target
+    public static double BANG_ENTER_RPM = 50;       // go full power when this far BELOW target
+    public static double BANG_EXIT_RPM = 4;        // hand back to FF+P when within this much below target
     // while LB is held (balls going through), recover HARDER: full power as soon as we're a little slow
-    public static double FEED_BANG_ENTER_RPM = 30;   // full power when this far below target WHILE FEEDING
-    public static double FEED_BANG_EXIT_RPM = 5;     // back to FF+P when within this much
+    public static double FEED_BANG_ENTER_RPM = 80;   // full power when this far below target WHILE FEEDING
+    public static double FEED_BANG_EXIT_RPM = 50;    // back to FF+P when within this much
     public static double READY_RPM_TOL = 75;         // "ready to shoot" band
-    public static double VEL_FILTER = 0.01;           // 1 = raw velocity, smaller = smoother but laggier
+    public static double VEL_FILTER = 0.5;           // 1 = raw velocity, smaller = smoother but laggier
     public static double VOLTAGE_PERIOD_S = 0.25;    // how often to read battery voltage
 
     // ---------------- hood ----------------
-    public static double HOOD_POS = 0.06;             // later: set from the shot table with setHood()
+    public static double HOOD_POS = 0.11;             // later: set from the shot table with setHood()
 
     // ---------------- intake ----------------
-    public static double INTAKE_POWER = -0.6;
+    public static double INTAKE_POWER = -1.0;
     public static double INTAKE_REVERSE_POWER = 0.4;
 
     // ---------------- transfer + gate ----------------
     public static double TRANSFER_FEED = -1.0;       // while shooting
-    public static double TRANSFER_HOLD = -0.675;      // pushing balls against the closed gate: LOWER = less current
+    public static double TRANSFER_HOLD = -0.75;      // pushing balls against the closed gate: LOWER = less current
     public static double GATE_CLOSED = 0.4;          // swap these two if the gate works backwards
     public static double GATE_OPEN = 0.65;
     // Auto shot: MainOpMode sets RPM + hood from ShotTable every loop (using turret.d).
@@ -88,6 +88,7 @@ public class Shooter extends Subsystem {
     public double hoodFix = 0;                            // hood change from the slow-flywheel fix
     public double burstMinRpm = 0, lastBurstMinRpm = 0;   // lowest rpm during the current / last LB burst
     private final ElapsedTime voltageTimer = new ElapsedTime();
+    private double lastHood = -1, lastGate = -1;   // only send servo commands when they change
 
     @Override
     public void init(OpMode opMode) {
@@ -141,8 +142,9 @@ public class Shooter extends Subsystem {
         if (feeding) burstMinRpm = Math.min(burstMinRpm, rpm);
         // ---- hood + gate servos (SERVOS_ON = false turns them off completely, for power testing) ----
         if (SERVOS_ON) {
-            hoodServo.setPosition(HOOD_POS);
-            gateServo.setPosition(feeding ? GATE_OPEN : GATE_CLOSED);
+            if (Math.abs(HOOD_POS - lastHood) > 0.001) { hoodServo.setPosition(HOOD_POS); lastHood = HOOD_POS; }
+            double gate = feeding ? GATE_OPEN : GATE_CLOSED;
+            if (gate != lastGate) { gateServo.setPosition(gate); lastGate = gate; }
         } else {
             if (hoodServo instanceof ServoImplEx) ((ServoImplEx) hoodServo).setPwmDisable();
             if (gateServo instanceof ServoImplEx) ((ServoImplEx) gateServo).setPwmDisable();
