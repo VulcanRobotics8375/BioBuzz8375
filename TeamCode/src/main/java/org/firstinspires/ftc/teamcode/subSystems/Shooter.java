@@ -20,7 +20,7 @@ import robotcore.Subsystem;
  *
  * Controls (gamepad2):
  *   Y            flywheel on/off
- *   X            intake on/off        (hold right trigger = reverse intake)
+ *   X            intake on/off        (hold right trigger = reverse intake AND transfer)
  *   A            transfer on/off      (when on and not shooting: low HOLD power against the gate)
  *   left bumper  HOLD to shoot: gate opens + transfer feeds everything (flywheel must be on)
  *
@@ -53,18 +53,21 @@ public class Shooter extends Subsystem {
     public static double FEED_BANG_EXIT_RPM = 50;    // back to FF+P when within this much
     public static double READY_RPM_TOL = 75;         // "ready to shoot" band
     public static double VEL_FILTER = 0.5;           // 1 = raw velocity, smaller = smoother but laggier
-    public static double VOLTAGE_PERIOD_S = 0.25;    // how often to read battery voltage
+    public static double VOLTAGE_PERIOD_S = 1.0;     // how often to read battery voltage
 
     // ---------------- hood ----------------
     public static double HOOD_POS = 0.11;             // later: set from the shot table with setHood()
 
     // ---------------- intake ----------------
-    public static double INTAKE_POWER = -1.0;
+    public static double INTAKE_POWER = -0.8;
     public static double INTAKE_REVERSE_POWER = 0.4;
 
     // ---------------- transfer + gate ----------------
     public static double TRANSFER_FEED = -1.0;       // while shooting
-    public static double TRANSFER_HOLD = -0.75;      // pushing balls against the closed gate: LOWER = less current
+    public static double TRANSFER_REVERSE_POWER = 0.75;   // right trigger: transfer runs backwards (unjam)
+    // HOLD = transfer pushing balls against the CLOSED gate. The motor is STALLED the whole time, so this is
+    // pure current draw. Only needs enough to keep balls seated. Was -0.75. NOT voltage-boosted (on purpose).
+    public static double TRANSFER_HOLD = -0.35;
     public static double GATE_CLOSED = 0.4;          // swap these two if the gate works backwards
     public static double GATE_OPEN = 0.65;
     // Auto shot: MainOpMode sets RPM + hood from ShotTable every loop (using turret.d).
@@ -107,7 +110,7 @@ public class Shooter extends Subsystem {
         transferMotor.setDirection(DcMotorSimple.Direction.REVERSE);
 
         gateServo = hardwareMap.get(Servo.class, "transfer_servo");
-        hoodServo = hardwareMap.get(Servo.class, "hood_servo");
+        hoodServo = hardwareMap.get(Servo.class, "ser");
         hoodServo.setDirection(Servo.Direction.REVERSE);
         flowerServo = hardwareMap.get(Servo.class, "flower_servo");
 
@@ -156,7 +159,8 @@ public class Shooter extends Subsystem {
 
         // ---- transfer ----
         if (feeding) transferMotor.setPower(vc(TRANSFER_FEED));
-        else if (transferOn) transferMotor.setPower(vc(TRANSFER_HOLD));
+        else if (gamepad2.right_trigger_pressed) transferMotor.setPower(vc(TRANSFER_REVERSE_POWER));  // unjam: back out
+        else if (transferOn) transferMotor.setPower(TRANSFER_HOLD);   // no vc(): a stalled motor doesn't need more push at low battery
         else transferMotor.setPower(0);
 
         // ---- intake ----
@@ -219,6 +223,7 @@ public class Shooter extends Subsystem {
     }
 
     private void addTelemetry() {
+        if (!showTelemetry) return;
         telemetry.addData("flywheel", "%s  target %.0f  rpm %.0f  power %.2f  %s",
                 flywheelOn ? "ON" : "off", TARGET_RPM, rpm, flyPower, bangMode ? "BANG" : "FF+P");
         telemetry.addData("READY", ready);

@@ -38,7 +38,7 @@ public class IntakeSensor extends Subsystem {
     // ---- LEDs ----
     // pin voltage that LIGHTS the LED: true = HIGH (pin -> resistor -> LED -> GND), false = LOW (3.3V -> LED -> pin)
     public static boolean LED_ON_STATE = true;
-    public static long READ_PERIOD_MS = 40;     // pause between sensor reads so the thread doesn't hog the hub
+    public static long READ_PERIOD_MS = 100;    // pause between sensor reads so the thread doesn't hog the hub
 
     private DistanceSensor sensor;
     private Object ledBall, ledZone;   // DigitalChannel or LED, whichever the config uses
@@ -105,6 +105,7 @@ public class IntakeSensor extends Subsystem {
         if (ballSeen != lastBall) { setLed(ledBall, ballSeen); lastBall = ballSeen; }   // each write = a hub command
         if (shootable != lastZone) { setLed(ledZone, shootable); lastZone = shootable; }
 
+        if (!showTelemetry) return;
         telemetry.addData("intake sensor", sensor == null ? "NOT IN CONFIG (intake_dist)"
                 : String.format("%.0f mm  ball %s  %s  (read %.0f ms)", d > 8000 ? -1 : d,
                 ballSeen ? "YES" : "no", blocked ? "INTAKE STOPPED" : "", readMs));

@@ -14,7 +14,7 @@ import org.firstinspires.ftc.teamcode.subSystems.AprilTag;
 import org.firstinspires.ftc.teamcode.subSystems.MotorOuttake;
 import org.firstinspires.ftc.teamcode.subSystems.IntakeSensor;
 import org.firstinspires.ftc.teamcode.subSystems.Shooter;
-import org.firstinspires.ftc.teamcode.subSystems.fieldCentricMecanum;
+import org.firstinspires.ftc.teamcode.subSystems.robotCentricMecanum;
 import org.firstinspires.ftc.teamcode.subSystems.Intake;
 import org.firstinspires.ftc.teamcode.subSystems.localizer;
 import org.firstinspires.ftc.teamcode.subSystems.turret;
@@ -31,8 +31,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
     TelemetryManager panels;
     FieldManager field;
     private double axial, lateral, yaw;
-    fieldCentricMecanum drive = new fieldCentricMecanum();
-    Intake Intake;
+    robotCentricMecanum drive = new robotCentricMecanum();   // has BOTH robotCentric() and fieldCentric()
     MotorOuttake Outtake = new MotorOuttake();
     Shooter shooter = new Shooter();
     IntakeSensor intakeSensor = new IntakeSensor();
@@ -40,7 +39,7 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
 
     //    localizer loc = new localizer(-63, -63, 0);
     // Panels frame. Old frame was (12.75, 63, -90 deg) -> rotated -90 deg: (63, -12.75, 180 deg)
-    public static double startx=63, starty=-12.75, starth=Math.PI;
+    public static double startx=-61, starty=-63, starth=Math.PI;
     localizer loc = new localizer(startx, starty, starth);
 
     GoBildaPinpointDriver odo;
@@ -56,6 +55,8 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
     // Panels DRAWING only (localization/aiming untouched): rotate what's drawn by this many degrees.
     // -90 = undo a field that shows up rotated 90 deg CCW. Wrong way round? try +90 (live in Panels).
     public static double FIELD_DRAW_ROT_DEG = 0;   // localization now uses the Panels frame -> no rotation
+    public static long TELEMETRY_PERIOD_MS = 100;   // Driver Hub text 10x/s (it only shows 4x/s anyway)
+    long lastTelemetryMs = 0;
     public static long PANELS_PERIOD_MS = 50;   // Panels graphs + field drawing at 20 Hz, not every loop
     java.util.List<LynxModule> hubs;
     long lastPanelsMs = 0;
@@ -64,6 +65,11 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
     double loopMax = 0, loopMaxShow = 0, loopSum = 0; int loopCount = 0; double loopAvgShow = 0;
     long profWindowStart = System.nanoTime();
 
+    // Drive: field-centric from the SOUTH driver station (bottom edge of the Panels field):
+    // stick forward = toward +y (top of the Panels field), stick right = toward +x.
+    public static boolean ROBOT_CENTRIC = false;      // true = robot-centric, false = field-centric from the south side
+    public static double DRIVER_FORWARD_DEG = 90;     // Panels-frame direction that "stick forward" drives (90 = +y = north)
+    public static double TURRET_NUDGE_DEG = 2;   // per g2 dpad left/right press
     public static boolean USE_AUTON_POSE = true;   // start teleop where auton ended (if auton ran < 60 s ago)
     public void init() {
         if (USE_AUTON_POSE && org.firstinspires.ftc.teamcode.auton.PoseStorage.fresh(60)) {
@@ -100,6 +106,8 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
     @Override
     public void loop() {
         long t0 = System.nanoTime();
+        boolean telemetryDue = System.currentTimeMillis() - lastTelemetryMs >= TELEMETRY_PERIOD_MS;
+        robotcore.Subsystem.showTelemetry = telemetryDue;   // subsystems skip their telemetry on the other loops
         for (LynxModule hub : hubs) hub.clearBulkCache();
         pads.update(this);
 
@@ -107,7 +115,9 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
         lateral = -pads.g1.left_stick_x;
         yaw = -pads.g1.right_stick_x;
 
-        drive.fieldCentric(axial, lateral, yaw);   // also reads the Pinpoint
+        if (pads.g1.backWasPressed()) ROBOT_CENTRIC = !ROBOT_CENTRIC;   // driver switch: g1 BACK
+        if (ROBOT_CENTRIC) drive.robotCentric(axial, lateral, yaw);   // both also read the Pinpoint
+        else drive.fieldCentric(axial, lateral, yaw, loc.getH() - Math.toRadians(DRIVER_FORWARD_DEG));  // field heading (localizer)
         long t1 = System.nanoTime();
 //        Intake.runIntake();
 //        Outtake.runOuttake();
@@ -115,6 +125,10 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
         if (pads.g2.rightBumperWasPressed()) {
             alliance = !alliance;
         }
+        // turret zero fix (turret wasn't straight at init): dpad right/left = aim right/left, dpad down = reset
+        if (pads.g2.dpadRightWasPressed()) turret.zeroOffsetDeg += TURRET_NUDGE_DEG;
+        if (pads.g2.dpadLeftWasPressed())  turret.zeroOffsetDeg -= TURRET_NUDGE_DEG;
+        if (pads.g2.dpadDownWasPressed())  turret.zeroOffsetDeg = 0;
 
         if (alliance) { //BLUE
             if (loc.getX() <= 0){   // side split (was y <= 0 in the old frame)
@@ -208,6 +222,11 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
         //telmetry block
         field.update();
         }
+        if (telemetryDue) {
+        lastTelemetryMs = System.currentTimeMillis();
+        telemetry.addData("g1 sticks: left x / y, right x", "%.2f / %.2f, %.2f   (real pad: %.2f / %.2f)",
+                pads.g1.left_stick_x, pads.g1.left_stick_y, pads.g1.right_stick_x, gamepad1.left_stick_x, gamepad1.left_stick_y);
+        telemetry.addData("drive (g1 BACK = switch)", ROBOT_CENTRIC ? "ROBOT-centric" : "FIELD-centric (south)");
         telemetry.addData("start pose", usedAutonPose ? "FROM AUTON" : "taped start pose");
         if (alliance){
             telemetry.addData("alliance:", "BLUE");
@@ -227,9 +246,18 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
         telemetry.addData("ff / cmd vel (rad/s)", "%.2f / %.2f", turret.wturret, turret.wCmd);
         telemetry.addData("actual vel (rad/s)", "%.2f", turret.tVelocity());
         telemetry.addData("turret power", "%.2f", turret.lastPower);
-        telemetry.addData("turret FAULT", turret.faulted ? "YES: " + turret.faultReason : "no");
+        telemetry.addData("turret zero fix (g2 dpad L/R, down=reset)", "%+.0f deg", turret.zeroOffsetDeg);
+        telemetry.addData("turret tracking", !turret.reachable ? "NO - goal is behind the turret limits (turn the robot)"
+                : "yes");
         telemetry.addData("kP / kD", "%.3f / %.5f", turret.kP, turret.kD);
         telemetry.addData("robot x, y, h", "%.1f, %.1f, %.1f", loc.getX(), loc.getY(), Math.toDegrees(loc.getH()));
+        telemetry.addData("SOTM", "%s  virtual d %.1f  real d %.1f  tof %.2f  lead %.1f in",
+                turret.SOTM ? "on" : "off", turret.d, turret.dReal, turret.tofNow,
+                Math.hypot(turret.virX - turret.targetx, turret.virY - turret.targety));
+        telemetry.addData("shot", "%s  rpm %.0f  hood %.3f",
+                Shooter.AUTO_SHOT ? "AUTO (table)" : "manual", Shooter.TARGET_RPM, Shooter.HOOD_POS);
+        telemetry.update();
+        }
         if (panelsDue) {
         panels.addData("turret error (deg)", Math.toDegrees(turret.pError));
         panels.addData("turret target (deg)", Math.toDegrees(turret.theta));
@@ -243,13 +271,6 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
         panels.update();
         lastPanelsMs = System.currentTimeMillis();
         }
-        telemetry.addData("SOTM", "%s  virtual d %.1f  real d %.1f  tof %.2f  lead %.1f in",
-                turret.SOTM ? "on" : "off", turret.d, turret.dReal, turret.tofNow,
-                Math.hypot(turret.virX - turret.targetx, turret.virY - turret.targety));
-        telemetry.addData("shot", "%s  rpm %.0f  hood %.3f",
-                Shooter.AUTO_SHOT ? "AUTO (table)" : "manual", Shooter.TARGET_RPM, Shooter.HOOD_POS);
-        telemetry.update();
-
         // ---- profiler ----
         long t4 = System.nanoTime();
         double[] parts = {(t1 - t0) / 1e6, (t2 - t1) / 1e6, (t3 - t2) / 1e6, (t4 - t3) / 1e6};
@@ -272,5 +293,6 @@ import com.qualcomm.robotcore.hardware.HardwareMap;
     @Override
     public void stop() {
         intakeSensor.stop();
+        robotcore.Subsystem.showTelemetry = true;   // static: don't leave other OpModes with telemetry off
     }
 }

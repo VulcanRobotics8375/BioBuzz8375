@@ -13,6 +13,9 @@ public abstract class Subsystem {
 
     protected Gamepad gamepad2;
 
+    /** false = skip telemetry this loop (building strings costs loop time). MainOpMode turns it on ~10x/s. */
+    public static boolean showTelemetry = true;
+
 
     public void instantiateSubsystem(OpMode opMode){
         this.telemetry = opMode.telemetry;

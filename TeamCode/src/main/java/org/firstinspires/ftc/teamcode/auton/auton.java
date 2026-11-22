@@ -30,10 +30,10 @@ import org.firstinspires.ftc.teamcode.subSystems.turret;
  * At the end the pose is saved for teleop (PoseStorage) so the turret aims right after auton.
  */
 @Configurable
-@Autonomous(name = "4 balls + park auton")
+@Autonomous(name = "4 balls + park auton", preselectTeleOp = "MainOpMode")
 public class auton extends OpMode {
     // ---- shot settings per spot (tune these) ----
-    public static double SHOT1_RPM = 2090, SHOT1_HOOD = 0.11;   // from the start pose
+    public static double SHOT1_RPM = 2090, SHOT1_HOOD = 0.14;   // from the start pose
     public static double SHOT2_RPM = 2090, SHOT2_HOOD = 0.11;   // at controlPoseTwo
     public static double SHOT1_FEED_MS = 1000, SHOT2_FEED_MS = 1500;
     public static double SHOT_TIMEOUT_MS = 4500;                 // shoot anyway if not READY by then
@@ -42,6 +42,7 @@ public class auton extends OpMode {
 
     protected Follower follower;
     private final PoseFactory p = PoseFactory.degrees();
+    protected final Pose otherStartPose = p.of(15.5, -63, 90);
     protected final Pose startPose = p.of(15.5, 63, 270);
     private final Pose controlPoseThree = p.of(30, 63, 0);      // bend of the garden curve
     private final Pose gardenPose = p.of(48, 63, 0);
@@ -74,6 +75,9 @@ public class auton extends OpMode {
     private Path easyPark() {
         return curve(startPose, controlPose, park).linear(startPose, park);
     }
+    private Path otherEasyPark(){
+        return line(otherStartPose, park).linear(otherStartPose, park);
+    }
 
     @Override
     public void init() {
@@ -102,6 +106,19 @@ public class auton extends OpMode {
                 flywheel.shoot(SHOT1_FEED_MS, SHOT_TIMEOUT_MS),
                 flywheel.allOff(),
                 follow(follower, easyPark())
+        );
+    }
+
+    protected Command waitShootPark(){
+        return sequential(
+                waitMs(10000),
+                flywheel.setShot(SHOT1_RPM, SHOT1_HOOD),
+                flywheel.flywheelOn(),
+                flywheel.intakeOn(),
+                flywheel.transferOn(),
+                flywheel.shoot(SHOT1_FEED_MS, SHOT_TIMEOUT_MS),
+                flywheel.allOff(),
+                follow(follower, otherEasyPark())
         );
     }
 

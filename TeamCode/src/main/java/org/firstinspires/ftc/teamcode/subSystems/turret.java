@@ -32,6 +32,9 @@ public class turret extends Subsystem {
     public double goalX = -18.5805750382, goalY = -12.75, goalFacing = 0;  // front-center of the chosen goal
     // LOCK: hold the turret at lockAngleDeg instead of aiming (Shot Table Tuner). track() still runs, so
     // d (distance) and aimTheta (where the goal is, relative to the robot) keep updating.
+    // Driver fix for a turret that wasn't straight at init: + = turret aims more to the RIGHT (clockwise).
+    // Shifts what the code thinks "forward" is, so aiming AND the angle limits stay correct.
+    public double zeroOffsetDeg = 0;
     public boolean lockMode = false;
     public double lockAngleDeg = 0;
     public double aimTheta = 0;                 // rad: turret angle that WOULD point at the goal
@@ -72,10 +75,10 @@ public class turret extends Subsystem {
     public double lastPower;           // power actually sent to the servos (for telemetry)
     // ---- wire safety ----
     public static double SAFETY_DEG = 200;    // never push further out past this
-    public static double STALL_POWER = 0.3;   // "trying hard" threshold (used by the wrong-way check)
-    public boolean faulted = false;           // latched: turret stays off until the OpMode restarts
+    // (wrong-way fault check REMOVED: it was shutting the turret off during normal hard braking.
+    //  `faulted` stays only so other files still compile - nothing sets it any more.)
+    public boolean faulted = false;
     public String faultReason = "";
-    private long wrongWayStartNanos = -1;
     // Feedforward per direction (fit: power = kV * |vel| + kS). POS = turret turning CCW (angle up).
     // Swapped after the servo flip so each value stays with the same PHYSICAL direction.
     // Re-run Turret Characterize to confirm.
@@ -149,7 +152,7 @@ public class turret extends Subsystem {
 
     public double turretAngle() {
 //        return 0;
-        return rawTicks() / TICKS_PER_TURRET_RAD;  // rad, relative to where it was zeroed
+        return rawTicks() / TICKS_PER_TURRET_RAD + Math.toRadians(zeroOffsetDeg);  // rad, + driver's zero fix
     } // turrent angle from encoder
 
     public void  targetUpdate(String target) {
@@ -282,19 +285,6 @@ public class turret extends Subsystem {
         if (Math.abs(current) > Math.toRadians(SAFETY_DEG) && Math.signum(finalPower) == Math.signum(current)) {
             finalPower = 0;
         }
-        // 2. wrong sign: pushing one way but moving fast the OTHER way -> latch off
-        if (Math.abs(finalPower) > STALL_POWER && Math.abs(tVelocity()) > 1.0
-                && Math.signum(tVelocity()) != Math.signum(finalPower)) {
-            if (wrongWayStartNanos < 0) wrongWayStartNanos = System.nanoTime();
-            if ((System.nanoTime() - wrongWayStartNanos) / 1e9 > 0.25) {
-                faulted = true;
-                faultReason = String.format("WRONG WAY: power %.2f but moving %.1f rad/s at %.0f deg",
-                        finalPower, tVelocity(), Math.toDegrees(current));
-            }
-        } else {
-            wrongWayStartNanos = -1;
-        }
-        if (faulted) finalPower = 0;
 
         lastPower = finalPower;
         setPower(finalPower);

@@ -26,6 +26,14 @@ public class fieldCentricMecanum extends Subsystem{
     private double headingSetpoint = 0.0;
     private boolean isLocking = false;
     public static double STRAFE_GAIN = 1.2; // >1 boosts sideways to match forward (try 1.1-1.2 after Mecanum Wheel Test)
+    // ---- power saving: soft start ----
+    // Motors draw HUGE current when they jump from 0 to full power (that's what browns out the hub).
+    // This only limits SPEEDING UP: power can rise at most ACCEL_PER_S per second (5 = 0 -> full in 0.2 s).
+    // Slowing down, stopping and letting go of the stick are still INSTANT (no extra coasting).
+    // 0 = off (old behavior). Higher = snappier, lower = gentler on the battery.
+    public static double ACCEL_PER_S = 0;   // OFF (drivers found 5 sluggish). Try 10-15 if you want it back gently.
+    private final double[] lastPow = new double[4];
+    private long lastDriveNanos = 0;
     public static double kP = 0; //tune to adjust correction strength for anti-drifting.Tuned 8/16/26 by Zara
 
     @Override
@@ -80,18 +88,53 @@ public class fieldCentricMecanum extends Subsystem{
         maxPower = Math.max(maxPower, Math.abs(backRightPower));
 
         //planning to pid tune to get velocity >> power to prevent weird drift. also could double for auton. actuall ycan i js auton tune and use the same controlelrs here? that would be cool.
-        frontLeftDrive.setPower(maxSpeed * (frontLeftPower / maxPower));
-        backLeftDrive.setPower(maxSpeed * (backLeftPower / maxPower));
-        frontRightDrive.setPower(maxSpeed * (frontRightPower / maxPower));
-        backRightDrive.setPower(maxSpeed * (backRightPower / maxPower));
+        long now = System.nanoTime();
+        double dt = lastDriveNanos == 0 ? 0 : Math.min((now - lastDriveNanos) / 1e9, 0.1);
+        lastDriveNanos = now;
+        double step = ACCEL_PER_S * dt;
+        double fl = softStart(0, maxSpeed * (frontLeftPower / maxPower), step);
+        double bl = softStart(1, maxSpeed * (backLeftPower / maxPower), step);
+        double fr = softStart(2, maxSpeed * (frontRightPower / maxPower), step);
+        double br = softStart(3, maxSpeed * (backRightPower / maxPower), step);
+        frontLeftDrive.setPower(fl);
+        backLeftDrive.setPower(bl);
+        frontRightDrive.setPower(fr);
+        backRightDrive.setPower(br);
+        if (showTelemetry) {
+            telemetry.addData("drive power fl / fr / bl / br", "%.2f / %.2f / %.2f / %.2f", fl, fr, bl, br);
+        }
 
     }
 
+    /** Limit how fast power can RISE (soft start). Lowering power / stopping / reversing to 0 = instant. */
+    private double softStart(int i, double target, double step) {
+        double last = lastPow[i];
+        double out;
+        if (ACCEL_PER_S <= 0) {
+            out = target;                                          // feature off
+        } else {
+            if (last != 0 && Math.signum(target) != Math.signum(last)) last = 0;   // reversing: drop to 0 right away
+            if (Math.abs(target) <= Math.abs(last)) out = target;  // slowing down: instant
+            else out = last + Math.signum(target) * Math.min(Math.abs(target) - Math.abs(last), step);
+        }
+        lastPow[i] = out;
+        return out;
+    }
+
     public void fieldCentric(double axial, double lateral, double yaw) {
+        fieldCentric(axial, lateral, yaw, Double.NaN);
+    }
+
+    /**
+     * driveHeading = the heading (rad) used to turn the sticks. 0 = the robot faces "stick forward".
+     * NaN = use the raw Pinpoint heading (stick forward = whatever way the robot faced at init).
+     */
+    public void fieldCentric(double axial, double lateral, double yaw, double driveHeading) {
         odo.update(); //update odo positions and class sensors
         Pose2D pos = odo.getPosition();
 
         double currentHeading = pos.getHeading(AngleUnit.RADIANS);
+        if (Double.isNaN(driveHeading)) driveHeading = currentHeading;
 
         // Heading Lock Controller
         if (Math.abs(yaw) > 0.05) {
@@ -116,10 +159,12 @@ public class fieldCentricMecanum extends Subsystem{
         double theta = Math.atan2(axial, lateral);
         double r = Math.hypot(lateral, axial);
 
-        String data = String.format(Locale.US, "{X: %.3f, Y: %.3f, H: %.3f}", pos.getX(DistanceUnit.MM), pos.getY(DistanceUnit.MM), pos.getHeading(AngleUnit.DEGREES));
-        telemetry.addData("Position", data);
+        if (showTelemetry) {
+            String data = String.format(Locale.US, "{X: %.3f, Y: %.3f, H: %.3f}", pos.getX(DistanceUnit.MM), pos.getY(DistanceUnit.MM), pos.getHeading(AngleUnit.DEGREES));
+            telemetry.addData("Position", data);
+        }
 
-        theta = AngleUnit.normalizeRadians(theta - pos.getHeading(AngleUnit.RADIANS));
+        theta = AngleUnit.normalizeRadians(theta - driveHeading);
 
         double newAxial = r * Math.sin(theta);
         double newStrafe = r * Math.cos(theta);
